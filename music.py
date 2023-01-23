@@ -88,6 +88,16 @@ class MusicBot(commands.Cog):
     @commands.command(brief="Stops current song")
     async def stop(self, ctx):
         await self.vc.stop()
+
+    @commands.command(name='leave', aliases=["stop", "dc", "disconnect", "bye"], brief="Leaves the channel")
+    async def leave(self, ctx, guild):
+        vc = ctx.voice_client
+
+        if not vc or not vc.is_connected():
+            embed = discord.Embed(title="", description="I'm not connected to a voice channel", color=discord.Color.green())
+            return await ctx.send(embed=embed)
+
+        guild.voice_client.disconnect()
         
     @commands.command(brief="Fast Forward n seconds")
     async def ff(self, ctx, seconds : int = 15):
