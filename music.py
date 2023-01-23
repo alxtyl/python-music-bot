@@ -62,7 +62,7 @@ class MusicBot(commands.Cog):
             embed = discord.Embed(title="", description="I'm not connected to a voice channel", color=discord.Color.green())
             return await ctx.send(embed=embed)
 
-        server = self.vc.message.guild.voice_client
+        server = ctx.message.guild.voice_client
         await server.disconnect()
             
     @commands.command(brief="Plays a track from Youtube")
