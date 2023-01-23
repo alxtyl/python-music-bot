@@ -95,7 +95,7 @@ class MusicBot(commands.Cog):
             embed = discord.Embed(title="", description="I'm not connected to a voice channel", color=discord.Color.green())
             return await ctx.send(embed=embed)
 
-        self.vc.disconnect()
+        await self.vc.disconnect()
         
     @commands.command(brief="Fast Forward n seconds")
     async def ff(self, ctx, seconds : int = 15):
