@@ -118,4 +118,8 @@ class MusicBot(commands.Cog):
             embed.add_field(name=track_info[1], value=track_info[0], inline=False)
             
         await ctx.send(embed=embed)
-            
+
+async def setup(bot):
+    music_bot = MusicBot(bot)
+    await bot.add_cog(music_bot)
+    await music_bot.setup()
