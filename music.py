@@ -64,7 +64,7 @@ class MusicBot(commands.Cog):
             await ctx.send(f"Added {chosen_track.title} to the Queue")
             self.vc.queue.put(chosen_track)
 
-        if self.current_track and self.vc and ~self.vc.is_playing():
+        if self.current_track and self.vc and not self.vc.is_playing():
             await self.vc.play(self.current_track)
 
     @commands.command(brief="Skips the current song")
