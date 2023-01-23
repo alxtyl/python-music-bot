@@ -51,25 +51,17 @@ class MusicBot(commands.Cog):
         self.vc = await channel.connect(cls=wavelink.Player)
         await ctx.send(f"Joined {channel.name}")
         
-    @commands.command(brief="Search for a youtube track")
-    async def add(self, ctx, *title : str):
-        # You could have a few choices of commands and say 
-        # !search yt <title>
-        # or !search spotify <title>
-        # or !search soundcloud <title> 
+    @commands.command(brief="Plays a track from Youtube")
+    async def play(self, ctx, *title : str):
         chosen_track = await wavelink.YouTubeTrack.search(query=" ".join(title), return_first=True)
         if chosen_track:
             self.current_track = chosen_track
             await ctx.send(f"Added {chosen_track.title} to the Queue")
             self.vc.queue.put(chosen_track)
-        
-    @commands.command(brief="Play the current track")
-    async def play(self, ctx):
-        # in the video you will see the issue that arises with this
-        # check out the build in wavelink Queue object - also in the skip
+
         if self.current_track and self.vc:
             await self.vc.play(self.current_track)
-            
+
     @commands.command(brief="Skips the current song")
     async def skip(self, ctx):
         if self.vc.queue.is_empty:
