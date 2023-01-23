@@ -34,12 +34,12 @@ class MusicBot(commands.Cog):
     
     @commands.Cog.listener()
     async def on_wavelink_track_start(self, player: wavelink.Player, track: wavelink.Track):
-        await self.music_channel.send(f"{track.title} started playing")
+        await self.music_channel.send(f"{track.source.title} started playing")
         
     @commands.Cog.listener()
     async def on_wavelink_track_end(self, player: wavelink.Player, track: wavelink.Track, reason):
-        await self.music_channel.send(f"{track.title} finished")
-        self.history.append(track.title)
+        await self.music_channel.send(f"{track.source.title} finished")
+        self.history.append(track.source.title)
     
     @commands.command(brief="Manually joins the bot into the voice channel")
     async def join(self, ctx):
@@ -86,13 +86,12 @@ class MusicBot(commands.Cog):
     @commands.command(brief="Resumes current paused song")
     async def resume(self, ctx):
         await self.vc.resume()
-        await ctx.send(f"Resuming current Track")
+        await ctx.send(f"Resuming current track")
         
     @commands.command(brief="Stops current song")
     async def stop(self, ctx):
         await self.vc.stop()
         
-    
     @commands.command(brief="Fast Forward n seconds")
     async def ff(self, ctx, seconds : int = 15):
         new_position = self.vc.position + seconds
