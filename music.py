@@ -6,6 +6,12 @@ import logging
 
 logging.basicConfig(level=logging.DEBUG)
 
+class VoiceConnectionError(commands.CommandError):
+    """Custom Exception class for connection errors."""
+
+class InvalidVoiceChannel(VoiceConnectionError):
+    """Exception for cases of invalid Voice Channels."""
+
 class MusicBot(commands.Cog):
     vc : wavelink.Player = None
     current_track = None
@@ -34,12 +40,11 @@ class MusicBot(commands.Cog):
     
     @commands.Cog.listener()
     async def on_wavelink_track_start(self, player: wavelink.Player, track: wavelink.Track):
-        await self.music_channel.send(f"{track.source.title} started playing")
+        await self.music_channel.send(f"{track.title} started playing")
         
     @commands.Cog.listener()
     async def on_wavelink_track_end(self, player: wavelink.Player, track: wavelink.Track, reason):
-        await self.music_channel.send(f"{track.source.title} finished")
-        self.history.append(track.source.title)
+        await self.music_channel.send(f"{track.title} finished")
     
     @commands.command(brief="Manually joins the bot into the voice channel")
     async def join(self, ctx):
@@ -59,7 +64,7 @@ class MusicBot(commands.Cog):
             await ctx.send(f"Added {chosen_track.title} to the Queue")
             self.vc.queue.put(chosen_track)
 
-        if self.current_track and self.vc:
+        if self.current_track and self.vc and ~self.vc.is_playing():
             await self.vc.play(self.current_track)
 
     @commands.command(brief="Skips the current song")
@@ -99,16 +104,22 @@ class MusicBot(commands.Cog):
     async def volume(self, ctx, new_volume : int = 100):
         await self.vc.set_volume(new_volume)
         
-    
-    @commands.command(brief="Shows any previous played songs")
-    async def history(self, ctx):
-        self.history.reverse()
-        embed = discord.Embed(title="Song History")
-        for track_item in self.history:
-            track_info = track_item.split(" - ")
-            embed.add_field(name=track_info[1], value=track_info[0], inline=False)
-            
-        await ctx.send(embed=embed)
+    @commands.command(name='leave', aliases=["stop", "dc", "disconnect", "bye"], description="stops music and disconnects from voice")
+    async def leave(self, ctx):
+        """Stop the currently playing song and destroy the player.
+        !Warning!
+            This will destroy the player assigned to your guild, also deleting any queued songs and settings.
+        """
+        vc = ctx.voice_client
+
+        if not vc or not vc.is_connected():
+            embed = discord.Embed(title="", description="I'm not connected to a voice channel", color=discord.Color.green())
+            return await ctx.send(embed=embed)
+
+        await ctx.message.add_reaction('👋')
+        await ctx.send('**Successfully disconnected**')
+
+        await self.cleanup(ctx.guild)
 
 async def setup(bot):
     music_bot = MusicBot(bot)
