@@ -55,7 +55,16 @@ class MusicBot(commands.Cog):
             return 
         self.vc = await channel.connect(cls=wavelink.Player)
         await ctx.send(f"Joined {channel.name}")
-        
+
+    @commands.command(name='leave', aliases=["dc", "disconnect", "bye"], brief="Leaves the channel")
+    async def leave(self, ctx):
+        if not self.vc or not self.vc.is_connected():
+            embed = discord.Embed(title="", description="I'm not connected to a voice channel", color=discord.Color.green())
+            return await ctx.send(embed=embed)
+
+        server = self.vc.message.guild.voice_client
+        await server.disconnect()
+            
     @commands.command(brief="Plays a track from Youtube")
     async def play(self, ctx, *title : str):
         chosen_track = await wavelink.YouTubeTrack.search(query=" ".join(title), return_first=True)
@@ -89,14 +98,6 @@ class MusicBot(commands.Cog):
     async def stop(self, ctx):
         await self.vc.stop()
 
-    @commands.command(name='leave', aliases=["dc", "disconnect", "bye"], brief="Leaves the channel")
-    async def leave(self, ctx, guild):
-        if not self.vc or not self.vc.is_connected():
-            embed = discord.Embed(title="", description="I'm not connected to a voice channel", color=discord.Color.green())
-            return await ctx.send(embed=embed)
-
-        await self.vc.disconnect()
-        
     @commands.command(brief="Fast Forward n seconds")
     async def ff(self, ctx, seconds : int = 15):
         new_position = self.vc.position + seconds
