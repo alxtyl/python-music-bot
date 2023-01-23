@@ -103,23 +103,6 @@ class MusicBot(commands.Cog):
     @commands.command(brief="Sets the output volume")
     async def volume(self, ctx, new_volume : int = 100):
         await self.vc.set_volume(new_volume)
-        
-    @commands.command(name='leave', aliases=["stop", "dc", "disconnect", "bye"], description="stops music and disconnects from voice")
-    async def leave(self, ctx):
-        """Stop the currently playing song and destroy the player.
-        !Warning!
-            This will destroy the player assigned to your guild, also deleting any queued songs and settings.
-        """
-        vc = ctx.voice_client
-
-        if not vc or not vc.is_connected():
-            embed = discord.Embed(title="", description="I'm not connected to a voice channel", color=discord.Color.green())
-            return await ctx.send(embed=embed)
-
-        await ctx.message.add_reaction('👋')
-        await ctx.send('**Successfully disconnected**')
-
-        await self.cleanup(ctx.guild)
 
 async def setup(bot):
     music_bot = MusicBot(bot)
