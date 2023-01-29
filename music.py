@@ -90,7 +90,7 @@ class MusicBot(commands.Cog):
             await self.vc.play(self.current_track)
         
         # If the queue isn't empty and the voice chat isn't playing, play next song
-        elif not self.vc.queue.is_empty and not self.vc.is_playing():
+        if not self.vc.queue.is_empty and not self.vc.is_playing():
             self.current_track = self.vc.queue.get()
             embed = discord.Embed(title="", description=f"Now playing: {self.current_track.title}", color=discord.Color.green())
             await ctx.send(embed=embed)
