@@ -99,11 +99,12 @@ class MusicBot(commands.Cog):
             embed = discord.Embed(title="", description="The queue is empty", color=discord.Color.red())
             return await ctx.send(embed=embed)
 
+        song_lst = list()
         temp_queue = self.vc.queue.copy()
-        queue_store = list()
         
         for i in range(temp_queue.count):
-            queue_store.append(temp_queue.get().title)
+            song = str(temp_queue.get().title) + ' - ' + str(temp_queue.get().length)
+            song_lst.append(song)
         
         embed = discord.Embed(title="Items In Queue", color=discord.Color.dark_blue())
         queue_store = '\n'.join(queue_store)  # Joining the list with newline as the delimiter
@@ -113,23 +114,25 @@ class MusicBot(commands.Cog):
     @commands.command(brief="Skips the current song")
     async def skip(self, ctx):
         if self.vc.queue.is_empty:
-            await ctx.send("There are no more tracks!")
-            return
+            embed = discord.Embed(title="", description="There are no more tracks in the queue", color=discord.Color.red())
+            return await ctx.send(embed=embed)
         self.current_track = self.vc.queue.get()
         await self.vc.play(self.current_track)
     
     @commands.command(brief="Pause playing song")
     async def pause(self, ctx):
         await self.vc.pause()
-        await ctx.send(f"Paused current Track")            
+        await ctx.send(f"Paused current track")            
         
     @commands.command(brief="Resumes current paused song")
     async def resume(self, ctx):
         await self.vc.resume()
         await ctx.send(f"Resuming current track")
         
-    @commands.command(brief="Stops current song")
+    @commands.command(brief="Stops the bot and clears queue")
     async def stop(self, ctx):
+        if not self.vc.queue.is_empty:
+            await self.vc.queue.clear()
         await self.vc.stop()
         
     @commands.command(brief="Sets the output volume")
