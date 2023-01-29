@@ -63,6 +63,9 @@ class MusicBot(commands.Cog):
             embed = discord.Embed(title="", description="I'm not connected to a voice channel", color=discord.Color.red())
             return await ctx.send(embed=embed)
 
+        if not self.vc.queue.is_empty:
+            self.vc.queue.clear()
+
         server = ctx.message.guild.voice_client
         await server.disconnect()
             
@@ -90,7 +93,7 @@ class MusicBot(commands.Cog):
             await self.vc.play(self.current_track)
         
         # If the queue isn't empty and the voice chat isn't playing, play next song
-        if not self.vc.queue.is_empty and not self.vc.is_playing():
+        if not self.vc.queue.is_empty:
             self.current_track = self.vc.queue.get()
             embed = discord.Embed(title="", description=f"Now playing: {self.current_track.title}", color=discord.Color.green())
             await ctx.send(embed=embed)
