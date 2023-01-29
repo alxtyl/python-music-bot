@@ -61,23 +61,30 @@ class MusicBot(commands.Cog):
     async def play(self, ctx, *title : str):
         await ctx.typing()
 
+        # Join channel if not connected
+        if not self.vc or not self.is_connected():
+            await ctx.join()
+
+        # Get track to play from youtube
         chosen_track = await wavelink.YouTubeTrack.search(query=" ".join(title), return_first=True)
         if chosen_track:
             self.current_track = chosen_track
             if not self.vc.queue.is_empty:
-                await ctx.send(f"Added {chosen_track.title} to the Queue")
+                embed = discord.Embed(title="", description=f"Added {chosen_track.title} to the Queue", color=discord.Color.red())
+                await ctx.send(embed=embed)
             self.vc.queue.put(chosen_track)
 
         # If bot isn't playing a song, play current song
         if self.current_track and self.vc and not self.vc.is_playing():
-            await ctx.send(f"Now playing: {self.current_track.title}")
+            embed = discord.Embed(title="", description=f"Now playing: {self.current_track.title}", color=discord.Color.red())
+            await ctx.send(embed=embed)
             await self.vc.play(self.current_track)
         
-        # If the queue isn't empty and the voice chat isn't playing
-        # play next song in the queue
+        # If the queue isn't empty and the voice chat isn't playing, play next song
         elif not self.vc.queue.is_empty and not self.vc.is_playing():
             self.current_track = self.vc.queue.get()
-            await ctx.send(f"Now playing: {self.current_track.title}")
+            embed = discord.Embed(title="", description=f"Now playing: {self.current_track.title}", color=discord.Color.red())
+            await ctx.send(embed=embed)
             await self.vc.play(self.current_track)
 
     @commands.command(brief="Shows what's in the queue")
@@ -94,7 +101,7 @@ class MusicBot(commands.Cog):
         queue_store = list()
         
         for i in range(temp_queue.count):
-            queue_store.append(temp_queue.get())
+            queue_store.append(temp_queue.get().title)
         
         embed = discord.Embed(title="Items in queue", description=queue_store, color=discord.Color.green())
         await ctx.send(embed=embed)
