@@ -103,8 +103,9 @@ class MusicBot(commands.Cog):
         temp_queue = self.vc.queue.copy()
         
         for i in range(temp_queue.count):
-            song = str(temp_queue.get().title) + ' - ' + str(temp_queue.get().length)
-            song_lst.append(song)
+            song = temp_queue.get()
+            song_formated = str(song.title) + ' - ' + str(song.length)
+            song_lst.append(song_formated)
         
         embed = discord.Embed(title="Items In Queue", color=discord.Color.dark_blue())
         queue_store = '\n'.join(queue_store)  # Joining the list with newline as the delimiter
@@ -132,7 +133,7 @@ class MusicBot(commands.Cog):
     @commands.command(brief="Stops the bot and clears queue")
     async def stop(self, ctx):
         if not self.vc.queue.is_empty:
-            await self.vc.queue.clear()
+            self.vc.queue.clear()
         await self.vc.stop()
         
     @commands.command(brief="Sets the output volume")
