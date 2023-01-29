@@ -50,8 +50,6 @@ class MusicBot(commands.Cog):
 
     @commands.command(name='leave', aliases=["dc", "disconnect", "bye"], brief="Leaves the channel")
     async def leave(self, ctx):
-        await ctx.typing()
-
         if not self.vc or not self.vc.is_connected():
             embed = discord.Embed(title="", description="I'm not connected to a voice channel", color=discord.Color.red())
             return await ctx.send(embed=embed)
@@ -95,7 +93,7 @@ class MusicBot(commands.Cog):
         temp_queue = self.vc.queue.copy()
         queue_store = list()
         
-        for i in temp_queue.count:
+        for i in range(temp_queue.count):
             queue_store.append(temp_queue.get())
         
         embed = discord.Embed(title="Items in queue", description=queue_store, color=discord.Color.green())
