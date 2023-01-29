@@ -74,12 +74,14 @@ class MusicBot(commands.Cog):
 
         # If bot isn't playing a song, play current song
         if self.current_track and self.vc and not self.vc.is_playing():
+            await ctx.send(f"Now playing: {self.current_track.title}")
             await self.vc.play(self.current_track)
         
         # If the queue isn't empty and the voice chat isn't playing
         # play next song in the queue
         elif not self.vc.queue.is_empty and not self.vc.is_playing():
             self.current_track = self.vc.queue.get()
+            await ctx.send(f"Now playing: {self.current_track.title}")
             await self.vc.play(self.current_track)
 
     @commands.command(brief="Skips the current song")
