@@ -37,7 +37,7 @@ class MusicBot(commands.Cog):
         logging.info(f"{node} is ready")
 
     @commands.Cog.listener()
-    async def on_wavelink_track_end(self, ctx, player: wavelink.Player, track: wavelink.Track, reason):
+    async def on_wavelink_track_end(self, ctx, player: wavelink.player, track: wavelink.Track, reason):
         if not player.queue.is_empty:
             next_song = await player.queue.get_wait()
             embed = discord.Embed(title="", description=f"Now playing: {next_song.title}", color=discord.Color.green())
