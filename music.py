@@ -88,7 +88,7 @@ class MusicBot(commands.Cog):
 
         # If bot isn't playing a song, play current song
         if not self.vc.is_playing():
-            logging.debug("Inside first logic statement for playing")
+            logging.info("Inside first logic statement for playing")
             self.current_track = self.vc.queue.get()
             embed = discord.Embed(title="", description=f"Now playing: {self.current_track.title}", color=discord.Color.green())
             await ctx.send(embed=embed)
@@ -96,7 +96,7 @@ class MusicBot(commands.Cog):
         
         # If the queue isn't empty and the voice chat isn't playing, play next song in the queue
         if not self.vc.queue.is_empty and not self.vc.is_playing():
-            logging.debug("Now inside queue check")
+            logging.info("Now inside queue check")
             self.current_track = self.vc.queue.get()
             embed = discord.Embed(title="", description=f"Now playing: {self.current_track.title}", color=discord.Color.green())
             await ctx.send(embed=embed)
