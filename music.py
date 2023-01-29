@@ -39,7 +39,7 @@ class MusicBot(commands.Cog):
     @commands.Cog.listener()
     async def on_wavelink_track_end(self, player: wavelink.Player, track: wavelink.Track, reason):
         if not player.queue.is_empty:
-            next_song = await player.queue.get_wait()
+            next_song = player.queue.get()
             embed = discord.Embed(title="", description=f"Now playing: {next_song.title}", color=discord.Color.green())
             await self.music_channel.send(embed=embed)
             await player.play(next_song)
@@ -98,14 +98,6 @@ class MusicBot(commands.Cog):
             embed = discord.Embed(title="", description=f"Now playing: {self.current_track.title}", color=discord.Color.green())
             await ctx.send(embed=embed)
             await self.vc.play(self.current_track)
-        
-        # # If the queue isn't empty and the voice chat isn't playing, play next song in the queue
-        # if not self.vc.queue.is_empty and not self.vc.is_playing():
-        #     logging.info("Now inside queue check")
-        #     self.current_track = self.vc.queue.get()
-        #     embed = discord.Embed(title="", description=f"Now playing: {self.current_track.title}", color=discord.Color.green())
-        #     await ctx.send(embed=embed)
-        #     await self.vc.play(self.current_track)
 
     @commands.command(brief="Shows what's in the queue")
     async def queue(self, ctx):
@@ -157,7 +149,8 @@ class MusicBot(commands.Cog):
             embed = discord.Embed(title="", description="There are no more tracks in the queue", color=discord.Color.red())
             return await ctx.send(embed=embed)
         
-        # Add in message for track being skipped
+        # TODO: Add in message for track being skipped
+
         self.current_track = self.vc.queue.get()
         await self.vc.play(self.current_track)
     
