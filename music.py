@@ -16,11 +16,9 @@ class MusicBot(commands.Cog):
     vc : wavelink.Player = None
     current_track = None
     music_channel = None
-    history = None
     
     def __init__(self, bot):
         self.bot = bot
-        self.history = list()
         
     async def setup(self):
         """
@@ -36,8 +34,8 @@ class MusicBot(commands.Cog):
     @commands.Cog.listener()
     async def on_wavelink_node_ready(self, node: wavelink.Node):
         logging.info(f"{node} is ready")
-        
-    
+
+    """   
     @commands.Cog.listener()
     async def on_wavelink_track_start(self, player: wavelink.Player, track: wavelink.Track):
         await self.music_channel.send(f"{track.title} started playing")
@@ -45,6 +43,7 @@ class MusicBot(commands.Cog):
     @commands.Cog.listener()
     async def on_wavelink_track_end(self, player: wavelink.Player, track: wavelink.Track, reason):
         await self.music_channel.send(f"{track.title} finished")
+    """
     
     @commands.command(brief="Manually joins the bot into the voice channel")
     async def join(self, ctx):
@@ -73,7 +72,14 @@ class MusicBot(commands.Cog):
             await ctx.send(f"Added {chosen_track.title} to the Queue")
             self.vc.queue.put(chosen_track)
 
+        # If bot isn't playing a song, play current song
         if self.current_track and self.vc and not self.vc.is_playing():
+            await self.vc.play(self.current_track)
+        
+        # If the queue isn't empty and the voice chat isn't playing
+        # play next song in the queue
+        elif not self.vc.queue.is_empty and not self.vc.is_playing():
+            self.current_track = self.vc.queue.get()
             await self.vc.play(self.current_track)
 
     @commands.command(brief="Skips the current song")
