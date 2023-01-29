@@ -86,21 +86,14 @@ class MusicBot(commands.Cog):
                 await ctx.send(embed=embed)
             self.vc.queue.put(self.current_track)
 
+        while(not self.vc.queue.is_empty):
         # If bot isn't playing a song, play current song
-        if not self.vc.is_playing():
-            logging.info("Inside first logic statement for playing")
-            self.current_track = self.vc.queue.get()
-            embed = discord.Embed(title="", description=f"Now playing: {self.current_track.title}", color=discord.Color.green())
-            await ctx.send(embed=embed)
-            await self.vc.play(self.current_track)
-        
-        # If the queue isn't empty and the voice chat isn't playing, play next song in the queue
-        if not self.vc.queue.is_empty and not self.vc.is_playing():
-            logging.info("Now inside queue check")
-            self.current_track = self.vc.queue.get()
-            embed = discord.Embed(title="", description=f"Now playing: {self.current_track.title}", color=discord.Color.green())
-            await ctx.send(embed=embed)
-            await self.vc.play(self.current_track)
+            if not self.vc.is_playing():
+                logging.info("Inside playing statement")
+                self.current_track = self.vc.queue.get()
+                embed = discord.Embed(title="", description=f"Now playing: {self.current_track.title}", color=discord.Color.green())
+                await ctx.send(embed=embed)
+                await self.vc.play(self.current_track)
 
     @commands.command(brief="Shows what's in the queue")
     async def queue(self, ctx):
