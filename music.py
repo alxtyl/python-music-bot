@@ -77,7 +77,7 @@ class MusicBot(commands.Cog):
         if not self.vc or not self.vc.is_connected():
             await ctx.invoke(self.bot.get_command('join'))
 
-        # Get track to play from youtube
+        # Add track to the queue, regardless of the bot playing
         chosen_track = await wavelink.YouTubeTrack.search(query=" ".join(title), return_first=True)
         if chosen_track:
             self.current_track = chosen_track
@@ -87,14 +87,14 @@ class MusicBot(commands.Cog):
             self.vc.queue.put(chosen_track)
 
         # If bot isn't playing a song, play current song
-        if self.current_track and self.vc and not self.vc.is_playing():
+        if not self.vc.is_playing():
             embed = discord.Embed(title="", description=f"Now playing: {self.current_track.title}", color=discord.Color.green())
             await ctx.send(embed=embed)
             await self.vc.play(self.current_track)
         
-        # If the queue isn't empty and the voice chat isn't playing, play next song
-        if not self.vc.queue.is_empty:
-            self.current_track = self.vc.queue.get()
+        # If the queue isn't empty and the voice chat isn't playing, play next song in the queue
+        if not self.vc.queue.is_empty and not self.vc.is_playing():
+            self.current_track = await self.vc.queue.get()
             embed = discord.Embed(title="", description=f"Now playing: {self.current_track.title}", color=discord.Color.green())
             await ctx.send(embed=embed)
             await self.vc.play(self.current_track)
