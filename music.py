@@ -35,7 +35,7 @@ class MusicBot(commands.Cog):
     async def on_wavelink_node_ready(self, node: wavelink.Node):
         logging.info(f"{node} is ready")
     
-    @commands.command(brief="Manually joins the bot into the voice channel")
+    @commands.command(brief="Joins the bot into the voice channel")
     async def join(self, ctx):
         await ctx.typing()
 
@@ -50,6 +50,12 @@ class MusicBot(commands.Cog):
 
     @commands.command(name='leave', aliases=["dc", "disconnect", "bye"], brief="Leaves the channel")
     async def leave(self, ctx):
+        # Make sure user is conn to voice channel
+        channel = ctx.message.author.voice.channel
+        if not channel:
+            embed = discord.Embed(title="", description="You're not connected to a voice channel", color=discord.Color.red())
+            return await ctx.send(embed=embed)
+
         if not self.vc or not self.vc.is_connected():
             embed = discord.Embed(title="", description="I'm not connected to a voice channel", color=discord.Color.red())
             return await ctx.send(embed=embed)
@@ -57,7 +63,7 @@ class MusicBot(commands.Cog):
         server = ctx.message.guild.voice_client
         await server.disconnect()
             
-    @commands.command(brief="Plays a track from Youtube")
+    @commands.command(brief="Plays a track from YouTube")
     async def play(self, ctx, *title : str):
         await ctx.typing()
 
@@ -91,6 +97,11 @@ class MusicBot(commands.Cog):
     async def queue(self, ctx):
         await ctx.typing()
 
+        channel = ctx.message.author.voice.channel
+        if not channel:
+            embed = discord.Embed(title="", description="You're not connected to a voice channel", color=discord.Color.red())
+            return await ctx.send(embed=embed)
+
         if not self.vc or not self.vc.is_connected():
             embed = discord.Embed(title="", description="I'm not connected to a voice channel", color=discord.Color.red())
             return await ctx.send(embed=embed)
@@ -104,16 +115,30 @@ class MusicBot(commands.Cog):
         
         for i in range(temp_queue.count):
             song = temp_queue.get()
-            song_formated = str(song.title) + ' - ' + str(song.length)
+            seconds = int(song.length) % (24 * 3600) 
+            hour = seconds // 3600
+            seconds %= 3600
+            minutes = seconds // 60
+            seconds %= 60
+            if hour > 0:
+                duration = "%dh %02dm %02ds" % (hour, minutes, seconds)
+            else:
+                duration = "%02dm %02ds" % (minutes, seconds)
+            song_formated = str(song.title) + ' - ' + duration
             song_lst.append(song_formated)
         
         embed = discord.Embed(title="Items In Queue", color=discord.Color.dark_blue())
         song_lst = '\n'.join(song_lst)  # Joining the list with newline as the delimiter
         embed.add_field(name="Songs:", value=song_lst)
-        await ctx.send(embed=embed)
+        return await ctx.send(embed=embed)
 
     @commands.command(brief="Skips the current song")
     async def skip(self, ctx):
+        channel = ctx.message.author.voice.channel
+        if not channel:
+            embed = discord.Embed(title="", description="You're not connected to a voice channel", color=discord.Color.red())
+            return await ctx.send(embed=embed)
+
         if self.vc.queue.is_empty:
             embed = discord.Embed(title="", description="There are no more tracks in the queue", color=discord.Color.red())
             return await ctx.send(embed=embed)
@@ -122,22 +147,54 @@ class MusicBot(commands.Cog):
     
     @commands.command(brief="Pause playing song")
     async def pause(self, ctx):
+        channel = ctx.message.author.voice.channel
+        if not channel:
+            embed = discord.Embed(title="", description="You're not connected to a voice channel", color=discord.Color.red())
+            return await ctx.send(embed=embed)
         await self.vc.pause()
         await ctx.send(f"Paused current track")            
         
     @commands.command(brief="Resumes current paused song")
     async def resume(self, ctx):
+        channel = ctx.message.author.voice.channel
+        if not channel:
+            embed = discord.Embed(title="", description="You're not connected to a voice channel", color=discord.Color.red())
+            return await ctx.send(embed=embed)
         await self.vc.resume()
         await ctx.send(f"Resuming current track")
+
+    @commands.command(brief="Clears queue")
+    async def clear(self, ctx):
+        await ctx.typing()
+
+        channel = ctx.message.author.voice.channel
+        if not channel:
+            embed = discord.Embed(title="", description="You're not connected to a voice channel", color=discord.Color.red())
+            return await ctx.send(embed=embed)
+        if self.vc.queue.is_empty:
+            embed = discord.Embed(title="", description="The queue is empty", color=discord.Color.red())
+            return await ctx.send(embed=embed)
+        else:
+            self.vc.queue.clear()
+            embed = discord.Embed(title="", description="Queue is cleared", color=discord.Color.green())
+            return await ctx.send(embed=embed)
         
     @commands.command(brief="Stops the bot and clears queue")
     async def stop(self, ctx):
+        channel = ctx.message.author.voice.channel
+        if not channel:
+            embed = discord.Embed(title="", description="You're not connected to a voice channel", color=discord.Color.red())
+            return await ctx.send(embed=embed)
         if not self.vc.queue.is_empty:
             self.vc.queue.clear()
         await self.vc.stop()
         
     @commands.command(brief="Sets the output volume")
     async def volume(self, ctx, new_volume : int = 100):
+        channel = ctx.message.author.voice.channel
+        if not channel:
+            embed = discord.Embed(title="", description="You're not connected to a voice channel", color=discord.Color.red())
+            return await ctx.send(embed=embed)
         await self.vc.set_volume(new_volume)
 
 async def setup(bot):
