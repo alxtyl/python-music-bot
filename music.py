@@ -3,6 +3,7 @@ import discord
 from discord.ext import commands
 import wavelink
 import logging
+import subprocess
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -198,6 +199,16 @@ class MusicBot(commands.Cog):
             embed = discord.Embed(title="", description="You're not connected to a voice channel", color=discord.Color.red())
             return await ctx.send(embed=embed)
         await self.vc.set_volume(new_volume)
+
+    @commands.command(brief="Displays system info", aliases=["spec"])
+    async def info(self, ctx):
+        py_ver = subprocess.check_output('python3 --version', shell=True).decode('utf-8').strip()
+        sys_info = subprocess.check_output('lsb_release -d', shell=True).decode('utf-8').split('\t')[1].strip()
+
+        embed = discord.Embed(title="System Info", color=discord.Color.dark_blue())
+        info_lst = '\n'.join([py_ver, sys_info])  # Joining the list with newline as the delimiter
+        embed.add_field(name="Specs", value=info_lst)
+        return await ctx.send(embed=embed)
 
 async def setup(bot):
     music_bot = MusicBot(bot)
