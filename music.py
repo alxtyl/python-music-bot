@@ -37,8 +37,11 @@ class MusicBot(commands.Cog):
         logging.info(f"{node} is ready")
 
     @commands.Cog.listener()
-    async def on_wavelink_track_end(self, ctx, player: wavelink.Player, track: current_track, reason):
-        if not player.queue.is_empty:
+    async def on_wavelink_track_end(self, player: wavelink.Player, track: wavelink.Track):
+        ctx = player.ctx
+        vc: player = ctx.voice_client
+
+        if not vc.queue.is_empty:
             next_song = await player.queue.get_wait()
             embed = discord.Embed(title="", description=f"Now playing: {next_song.title}", color=discord.Color.green())
             await ctx.send(embed=embed)
@@ -156,6 +159,8 @@ class MusicBot(commands.Cog):
         if self.vc.queue.is_empty:
             embed = discord.Embed(title="", description="There are no more tracks in the queue", color=discord.Color.red())
             return await ctx.send(embed=embed)
+        
+        # Add in message for track being skipped
         self.current_track = self.vc.queue.get()
         await self.vc.play(self.current_track)
     
