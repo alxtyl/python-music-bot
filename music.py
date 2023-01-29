@@ -45,7 +45,7 @@ class MusicBot(commands.Cog):
             embed = discord.Embed(title="", description="You're not connected to a voice channel", color=discord.Color.red())
             return await ctx.send(embed=embed) 
         self.vc = await channel.connect(cls=wavelink.Player)
-        embed = discord.Embed(title="", description=f"Joined {channel.name}", color=discord.Color.blurple())
+        embed = discord.Embed(title="", description=f"Joined {channel.name}", color=discord.Color.og_blurple())
         await ctx.send(embed=embed)
 
     @commands.command(name='leave', aliases=["dc", "disconnect", "bye"], brief="Leaves the channel")
@@ -62,7 +62,7 @@ class MusicBot(commands.Cog):
         await ctx.typing()
 
         # Join channel if not connected
-        if not self.vc or not self.is_connected():
+        if not self.vc or not self.vc.is_connected():
             await ctx.invoke(self.bot.get_command('join'))
 
         # Get track to play from youtube
@@ -70,25 +70,27 @@ class MusicBot(commands.Cog):
         if chosen_track:
             self.current_track = chosen_track
             if not self.vc.queue.is_empty:
-                embed = discord.Embed(title="", description=f"Added {chosen_track.title} to the Queue", color=discord.Color.red())
+                embed = discord.Embed(title="", description=f"Added {chosen_track.title} to the Queue", color=discord.Color.green())
                 await ctx.send(embed=embed)
             self.vc.queue.put(chosen_track)
 
         # If bot isn't playing a song, play current song
         if self.current_track and self.vc and not self.vc.is_playing():
-            embed = discord.Embed(title="", description=f"Now playing: {self.current_track.title}", color=discord.Color.red())
+            embed = discord.Embed(title="", description=f"Now playing: {self.current_track.title}", color=discord.Color.green())
             await ctx.send(embed=embed)
             await self.vc.play(self.current_track)
         
         # If the queue isn't empty and the voice chat isn't playing, play next song
         elif not self.vc.queue.is_empty and not self.vc.is_playing():
             self.current_track = self.vc.queue.get()
-            embed = discord.Embed(title="", description=f"Now playing: {self.current_track.title}", color=discord.Color.red())
+            embed = discord.Embed(title="", description=f"Now playing: {self.current_track.title}", color=discord.Color.green())
             await ctx.send(embed=embed)
             await self.vc.play(self.current_track)
 
     @commands.command(brief="Shows what's in the queue")
     async def queue(self, ctx):
+        await ctx.typing()
+
         if not self.vc or not self.vc.is_connected():
             embed = discord.Embed(title="", description="I'm not connected to a voice channel", color=discord.Color.red())
             return await ctx.send(embed=embed)
@@ -103,7 +105,9 @@ class MusicBot(commands.Cog):
         for i in range(temp_queue.count):
             queue_store.append(temp_queue.get().title)
         
-        embed = discord.Embed(title="Items in queue", description=queue_store, color=discord.Color.green())
+        embed = discord.Embed(title="Items In Queue", color=discord.Color.dark_blue())
+        queue_store = '\n'.join(queue_store)  # Joining the list with newline as the delimiter
+        embed.add_field(name="Songs:", value=queue_store)
         await ctx.send(embed=embed)
 
     @commands.command(brief="Skips the current song")
