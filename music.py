@@ -108,8 +108,8 @@ class MusicBot(commands.Cog):
             song_lst.append(song_formated)
         
         embed = discord.Embed(title="Items In Queue", color=discord.Color.dark_blue())
-        queue_store = '\n'.join(queue_store)  # Joining the list with newline as the delimiter
-        embed.add_field(name="Songs:", value=queue_store)
+        song_lst = '\n'.join(song_lst)  # Joining the list with newline as the delimiter
+        embed.add_field(name="Songs:", value=song_lst)
         await ctx.send(embed=embed)
 
     @commands.command(brief="Skips the current song")
