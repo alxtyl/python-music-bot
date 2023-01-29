@@ -35,6 +35,14 @@ class MusicBot(commands.Cog):
     @commands.Cog.listener()
     async def on_wavelink_node_ready(self, node: wavelink.Node):
         logging.info(f"{node} is ready")
+
+    @commands.Cog.listener()
+    async def on_wavelink_track_end(self, ctx, player: wavelink.Player, track: wavelink.Track, reason):
+        if not player.queue.is_empty:
+            next_song = await player.queue.get_wait()
+            embed = discord.Embed(title="", description=f"Now playing: {next_song.title}", color=discord.Color.green())
+            await ctx.send(embed=embed)
+            await player.play(next_song)
     
     @commands.command(brief="Joins the bot into the voice channel")
     async def join(self, ctx):
@@ -47,7 +55,7 @@ class MusicBot(commands.Cog):
         else:
             channel = voice.channel
             self.music_channel = ctx.message.channel
-        self.vc = await channel.connect(cls=wavelink.Player)
+        self.vc = await channel.connect(cls=wavelink.Player, self_deaf=True)
         embed = discord.Embed(title="", description=f"Joined {channel.name}", color=discord.Color.og_blurple())
         await ctx.send(embed=embed)
 
@@ -87,17 +95,10 @@ class MusicBot(commands.Cog):
 
         # If bot isn't playing a song, play current song
         if not self.vc.is_playing():
-            logging.info("Inside if statement")
             self.current_track = self.vc.queue.get()
             embed = discord.Embed(title="", description=f"Now playing: {self.current_track.title}", color=discord.Color.green())
             await ctx.send(embed=embed)
             await self.vc.play(self.current_track)
-        else:
-            logging.info("Inside else statement")
-            next_track = await self.vc.queue.get_wait()
-            embed = discord.Embed(title="", description=f"Now playing: {next_track.title}", color=discord.Color.green())
-            await ctx.send(embed=embed)
-            await self.vc.play(next_track)
         
         # # If the queue isn't empty and the voice chat isn't playing, play next song in the queue
         # if not self.vc.queue.is_empty and not self.vc.is_playing():
