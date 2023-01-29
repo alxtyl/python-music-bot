@@ -63,7 +63,7 @@ class MusicBot(commands.Cog):
 
         # Join channel if not connected
         if not self.vc or not self.is_connected():
-            await ctx.join()
+            await ctx.invoke(self.bot.get_command('join'))
 
         # Get track to play from youtube
         chosen_track = await wavelink.YouTubeTrack.search(query=" ".join(title), return_first=True)
