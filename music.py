@@ -88,19 +88,23 @@ class MusicBot(commands.Cog):
 
         # If bot isn't playing a song, play current song
         if not self.vc.is_playing():
-            logging.info("Inside first logic statement for playing")
+            logging.info("Inside if statement")
             self.current_track = self.vc.queue.get()
             embed = discord.Embed(title="", description=f"Now playing: {self.current_track.title}", color=discord.Color.green())
             await ctx.send(embed=embed)
             await self.vc.play(self.current_track)
+        else:
+            logging.info("Inside else statement")
+            next_track = await self.vc.queue.get_wait()
+            await self.vc.play(next_track)
         
-        # If the queue isn't empty and the voice chat isn't playing, play next song in the queue
-        if not self.vc.queue.is_empty and not self.vc.is_playing():
-            logging.info("Now inside queue check")
-            self.current_track = self.vc.queue.get()
-            embed = discord.Embed(title="", description=f"Now playing: {self.current_track.title}", color=discord.Color.green())
-            await ctx.send(embed=embed)
-            await self.vc.play(self.current_track)
+        # # If the queue isn't empty and the voice chat isn't playing, play next song in the queue
+        # if not self.vc.queue.is_empty and not self.vc.is_playing():
+        #     logging.info("Now inside queue check")
+        #     self.current_track = self.vc.queue.get()
+        #     embed = discord.Embed(title="", description=f"Now playing: {self.current_track.title}", color=discord.Color.green())
+        #     await ctx.send(embed=embed)
+        #     await self.vc.play(self.current_track)
 
     @commands.command(brief="Shows what's in the queue")
     async def queue(self, ctx):
