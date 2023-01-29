@@ -34,31 +34,26 @@ class MusicBot(commands.Cog):
     @commands.Cog.listener()
     async def on_wavelink_node_ready(self, node: wavelink.Node):
         logging.info(f"{node} is ready")
-
-    """   
-    @commands.Cog.listener()
-    async def on_wavelink_track_start(self, player: wavelink.Player, track: wavelink.Track):
-        await self.music_channel.send(f"{track.title} started playing")
-        
-    @commands.Cog.listener()
-    async def on_wavelink_track_end(self, player: wavelink.Player, track: wavelink.Track, reason):
-        await self.music_channel.send(f"{track.title} finished")
-    """
     
     @commands.command(brief="Manually joins the bot into the voice channel")
     async def join(self, ctx):
+        await ctx.typing()
+
         channel = ctx.message.author.voice.channel
         self.music_channel = ctx.message.channel
         if not channel:
-            await ctx.send(f"You need to join a voice channel first.")
-            return 
+            embed = discord.Embed(title="", description="You're not connected to a voice channel", color=discord.Color.red())
+            return await ctx.send(embed=embed) 
         self.vc = await channel.connect(cls=wavelink.Player)
-        await ctx.send(f"Joined {channel.name}")
+        embed = discord.Embed(title="", description=f"Joined {channel.name}", color=discord.Color.blurple())
+        await ctx.send(embed=embed)
 
     @commands.command(name='leave', aliases=["dc", "disconnect", "bye"], brief="Leaves the channel")
     async def leave(self, ctx):
+        await ctx.typing()
+
         if not self.vc or not self.vc.is_connected():
-            embed = discord.Embed(title="", description="I'm not connected to a voice channel", color=discord.Color.green())
+            embed = discord.Embed(title="", description="I'm not connected to a voice channel", color=discord.Color.red())
             return await ctx.send(embed=embed)
 
         server = ctx.message.guild.voice_client
@@ -66,10 +61,13 @@ class MusicBot(commands.Cog):
             
     @commands.command(brief="Plays a track from Youtube")
     async def play(self, ctx, *title : str):
+        await ctx.typing()
+
         chosen_track = await wavelink.YouTubeTrack.search(query=" ".join(title), return_first=True)
         if chosen_track:
             self.current_track = chosen_track
-            await ctx.send(f"Added {chosen_track.title} to the Queue")
+            if not self.vc.queue.is_empty:
+                await ctx.send(f"Added {chosen_track.title} to the Queue")
             self.vc.queue.put(chosen_track)
 
         # If bot isn't playing a song, play current song
@@ -84,11 +82,30 @@ class MusicBot(commands.Cog):
             await ctx.send(f"Now playing: {self.current_track.title}")
             await self.vc.play(self.current_track)
 
+    @commands.command(brief="Shows what's in the queue")
+    async def queue(self, ctx):
+        if not self.vc or not self.vc.is_connected():
+            embed = discord.Embed(title="", description="I'm not connected to a voice channel", color=discord.Color.red())
+            return await ctx.send(embed=embed)
+
+        if self.vc.queue.is_empty:
+            embed = discord.Embed(title="", description="The queue is empty", color=discord.Color.red())
+            return await ctx.send(embed=embed)
+
+        temp_queue = self.vc.queue.copy()
+        queue_store = list()
+        
+        for i in temp_queue.count:
+            queue_store.append(temp_queue.get())
+        
+        embed = discord.Embed(title="Items in queue", description=queue_store, color=discord.Color.green())
+        await ctx.send(embed=embed)
+
     @commands.command(brief="Skips the current song")
     async def skip(self, ctx):
         if self.vc.queue.is_empty:
             await ctx.send("There are no more tracks!")
-            return 
+            return
         self.current_track = self.vc.queue.get()
         await self.vc.play(self.current_track)
     
@@ -105,18 +122,7 @@ class MusicBot(commands.Cog):
     @commands.command(brief="Stops current song")
     async def stop(self, ctx):
         await self.vc.stop()
-
-    @commands.command(brief="Fast Forward n seconds")
-    async def ff(self, ctx, seconds : int = 15):
-        new_position = self.vc.position + seconds
-        await self.vc.seek(new_position * 1000)
         
-    @commands.command(brief="Go back n seconds")
-    async def gb(self, ctx, seconds : int = 15):
-        new_position = self.vc.position - seconds
-        await self.vc.seek(new_position * 1000)
-        
-    
     @commands.command(brief="Sets the output volume")
     async def volume(self, ctx, new_volume : int = 100):
         await self.vc.set_volume(new_volume)
