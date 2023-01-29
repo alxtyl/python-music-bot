@@ -37,7 +37,7 @@ class MusicBot(commands.Cog):
         logging.info(f"{node} is ready")
 
     @commands.Cog.listener()
-    async def on_wavelink_track_end(self, ctx, player: wavelink.player, track: wavelink.Track, reason):
+    async def on_wavelink_track_end(self, ctx, player: vc):
         if not player.queue.is_empty:
             next_song = await player.queue.get_wait()
             embed = discord.Embed(title="", description=f"Now playing: {next_song.title}", color=discord.Color.green())
@@ -88,9 +88,8 @@ class MusicBot(commands.Cog):
         chosen_track = await wavelink.YouTubeTrack.search(query=" ".join(title), return_first=True)
         if chosen_track:
             self.current_track = chosen_track
-            if not self.vc.queue.is_empty:
-                embed = discord.Embed(title="", description=f"Added {self.current_track.title} to the Queue", color=discord.Color.green())
-                await ctx.send(embed=embed)
+            embed = discord.Embed(title="", description=f"Added {self.current_track.title} to the Queue", color=discord.Color.green())
+            await ctx.send(embed=embed)
             self.vc.queue.put(self.current_track)
 
         # If bot isn't playing a song, play current song
