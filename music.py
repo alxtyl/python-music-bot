@@ -38,13 +38,10 @@ class MusicBot(commands.Cog):
 
     @commands.Cog.listener()
     async def on_wavelink_track_end(self, player: wavelink.Player, track: wavelink.Track, reason):
-        ctx = player.ctx
-        vc: player = ctx.voice_client
-
-        if not vc.queue.is_empty:
+        if not player.queue.is_empty:
             next_song = await player.queue.get_wait()
             embed = discord.Embed(title="", description=f"Now playing: {next_song.title}", color=discord.Color.green())
-            await ctx.send(embed=embed)
+            await self.music_channel.send(embed=embed)
             await player.play(next_song)
     
     @commands.command(brief="Joins the bot into the voice channel")
