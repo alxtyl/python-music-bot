@@ -37,7 +37,7 @@ class MusicBot(commands.Cog):
         logging.info(f"{node} is ready")
 
     @commands.Cog.listener()
-    async def on_wavelink_track_end(self, player: wavelink.Player, track: wavelink.Track):
+    async def on_wavelink_track_end(self, player: wavelink.Player, track: wavelink.Track, reason):
         ctx = player.ctx
         vc: player = ctx.voice_client
 
