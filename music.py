@@ -44,7 +44,7 @@ class MusicBot(commands.Cog):
             await self.music_channel.send(embed=embed)
             await player.play(next_song)
     
-    @commands.command(brief="Joins the bot into the voice channel")
+    @commands.command(name='join', aliases=['connect', 'j'], description="Joins the bot into the voice channel")
     async def join(self, ctx):
         await ctx.typing()
 
@@ -59,7 +59,7 @@ class MusicBot(commands.Cog):
         embed = discord.Embed(title="", description=f"Joined {channel.name}", color=discord.Color.og_blurple())
         await ctx.send(embed=embed)
 
-    @commands.command(name='leave', aliases=["dc", "disconnect", "bye"], brief="Leaves the channel")
+    @commands.command(name='leave', aliases=["dc", "disconnect", "bye"], description="Leaves the channel")
     async def leave(self, ctx):
         # Make sure user is conn to voice channel
         voice = ctx.message.author.voice
@@ -74,12 +74,12 @@ class MusicBot(commands.Cog):
         if not self.vc.queue.is_empty:
             self.vc.queue.clear()
 
+        await ctx.message.add_reaction('👋')
         server = ctx.message.guild.voice_client
         await server.disconnect()
             
-    @commands.command(brief="Plays a track from YouTube")
+    @commands.command(name='play', aliases=['sing','p'], description="Plays a track from YouTube")
     async def play(self, ctx, *title : str):
-
         # Join channel if not connected
         if not self.vc or not self.vc.is_connected():
             await ctx.invoke(self.bot.get_command('join'))
@@ -99,7 +99,7 @@ class MusicBot(commands.Cog):
             await ctx.send(embed=embed)
             await self.vc.play(self.current_track)
 
-    @commands.command(brief="Shows what's in the queue")
+    @commands.command(name='queue', aliases=['q', 'playlist', 'que'], description="Shows the queue")
     async def queue(self, ctx):
         await ctx.typing()
 
@@ -138,7 +138,7 @@ class MusicBot(commands.Cog):
         embed.add_field(name="Songs:", value=song_lst)
         return await ctx.send(embed=embed)
 
-    @commands.command(brief="Skips the current song")
+    @commands.command(name='skip', aliases=['s'], description="Skips the current song")
     async def skip(self, ctx):
         voice = ctx.message.author.voice
         if not voice:
@@ -154,7 +154,7 @@ class MusicBot(commands.Cog):
         self.current_track = self.vc.queue.get()
         await self.vc.play(self.current_track)
     
-    @commands.command(brief="Pause playing song")
+    @commands.command(description="Pause playing song")
     async def pause(self, ctx):
         voice = ctx.message.author.voice
         if not voice:
@@ -163,7 +163,7 @@ class MusicBot(commands.Cog):
         await self.vc.pause()
         await ctx.send(f"Paused current track")            
         
-    @commands.command(brief="Resumes current paused song")
+    @commands.command(description="Resumes current paused song")
     async def resume(self, ctx):
         channel = ctx.message.author.voice.channel
         if not channel:
@@ -172,7 +172,7 @@ class MusicBot(commands.Cog):
         await self.vc.resume()
         await ctx.send(f"Resuming current track")
 
-    @commands.command(brief="Clears queue")
+    @commands.command(name='clear', aliases=['clr', 'cl', 'cr'], description="Clears entire queue")
     async def clear(self, ctx):
         await ctx.typing()
 
@@ -188,7 +188,7 @@ class MusicBot(commands.Cog):
             embed = discord.Embed(title="", description="Queue is cleared", color=discord.Color.green())
             return await ctx.send(embed=embed)
         
-    @commands.command(brief="Stops the bot and resets queue")
+    @commands.command(description="Stops the bot and resets queue")
     async def stop(self, ctx):
         voice = ctx.message.author.voice.channel
         if not voice:
@@ -198,7 +198,7 @@ class MusicBot(commands.Cog):
             self.vc.queue.clear()
         await self.vc.stop()
         
-    @commands.command(brief="Sets the output volume")
+    @commands.command(description="Sets the output volume")
     async def volume(self, ctx, new_volume : int = 100):
         voice = ctx.message.author.voice
         if not voice:
@@ -206,7 +206,7 @@ class MusicBot(commands.Cog):
             return await ctx.send(embed=embed)
         await self.vc.set_volume(new_volume)
 
-    @commands.command(brief="Displays system info", aliases=["spec"])
+    @commands.command(description="Displays system info", aliases=["spec"])
     async def info(self, ctx):
         py_ver = subprocess.check_output('python3 --version', shell=True).decode('utf-8').strip()
         sys_info = subprocess.check_output('lsb_release -d', shell=True).decode('utf-8').split('\t')[1].strip()
