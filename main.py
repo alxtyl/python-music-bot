@@ -1,22 +1,26 @@
-# pynacl needs to be installed as well
+"""
+Before running, start lavalink server.
+Currently working with Lavalink v3.5.1
+"""
 
-import discord
-import asyncio
-from discord.ext import commands
-import music
 import os
+import discord
+from discord.ext import commands
+import logging
 
-cogs = [music]
-client = commands.Bot(command_prefix='!', intents=discord.Intents.all())
+logging.basicConfig(level=logging.DEBUG)
 
-@client.event
-async def on_ready():
-    print(f'Logged in as {client.user} (ID: {client.user.id})')
-    print('------')
-    await client.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name='for !'))
-    for item in cogs:
-        await item.setup(client)
+def run():
+    intents = discord.Intents.all()
 
-on_ready()
+    bot = commands.Bot(command_prefix='!', intents=intents)
 
-client.run(os.environ['BOT_KEY'])
+    @bot.event
+    async def on_ready():
+        await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name='for !'))
+        await bot.load_extension("music")
+
+    bot.run(os.environ['BOT_KEY'], root_logger=True)
+
+if __name__ == "__main__":
+    run()
