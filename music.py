@@ -45,9 +45,11 @@ class MusicBot(commands.Cog):
             await self.music_channel.send(embed=embed)
             await player.play(next_song)
         else:
-            await asyncio.sleep(1)
+            await asyncio.sleep(60)
             if player.is_playing():
                 return
+            embed = discord.Embed(title="", description=f"Disconnecting due to inactivity", color=discord.Color.green())
+            await self.music_channel.send(embed=embed)
             await player.disconnect()
     
     @commands.command(name='join', aliases=['connect', 'j'], description="Joins the bot into the voice channel")
