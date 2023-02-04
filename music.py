@@ -45,10 +45,10 @@ class MusicBot(commands.Cog):
             await self.music_channel.send(embed=embed)
             await player.play(next_song)
         else:
-            await asyncio.sleep(60)
+            await asyncio.sleep(600)
             if player.is_playing():
                 return
-            embed = discord.Embed(title="", description=f"Disconnecting due to inactivity", color=discord.Color.green())
+            embed = discord.Embed(title="", description=f"Disconnecting due to inactivity", color=discord.Color.red())
             await self.music_channel.send(embed=embed)
             await player.disconnect()
     
@@ -141,7 +141,7 @@ class MusicBot(commands.Cog):
             song_formated = str(song.title) + ' - ' + duration
             song_lst.append(song_formated)
         
-        embed = discord.Embed(title="Items In Queue", color=discord.Color.dark_blue())
+        embed = discord.Embed(title="Items In Queue", color=discord.Color.og_blurple())
         song_lst = '\n'.join(song_lst)  # Joining the list with newline as the delimiter
         embed.add_field(name="Songs:", value=song_lst)
         return await ctx.send(embed=embed)
