@@ -1,5 +1,6 @@
 import os
 import discord
+import asyncio
 from discord.ext import commands
 import wavelink
 import logging
@@ -43,6 +44,11 @@ class MusicBot(commands.Cog):
             embed = discord.Embed(title="", description=f"Now playing: {next_song.title}", color=discord.Color.green())
             await self.music_channel.send(embed=embed)
             await player.play(next_song)
+        else:
+            await asyncio.sleep(1)
+            if player.is_playing():
+                return
+            await player.disconnect()
     
     @commands.command(name='join', aliases=['connect', 'j'], description="Joins the bot into the voice channel")
     async def join(self, ctx):
