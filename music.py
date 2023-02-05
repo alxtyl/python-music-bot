@@ -1,5 +1,6 @@
 import os
 import discord
+import asyncio
 from discord.ext import commands
 import wavelink
 import logging
@@ -43,6 +44,13 @@ class MusicBot(commands.Cog):
             embed = discord.Embed(title="", description=f"Now playing: {next_song.title}", color=discord.Color.green())
             await self.music_channel.send(embed=embed)
             await player.play(next_song)
+        else:
+            await asyncio.sleep(600)
+            if player.is_playing():
+                return
+            embed = discord.Embed(title="", description=f"Disconnecting due to inactivity", color=discord.Color.red())
+            await self.music_channel.send(embed=embed)
+            await player.disconnect()
     
     @commands.command(name='join', aliases=['connect', 'j'], description="Joins the bot into the voice channel")
     async def join(self, ctx):
@@ -133,7 +141,7 @@ class MusicBot(commands.Cog):
             song_formated = str(song.title) + ' - ' + duration
             song_lst.append(song_formated)
         
-        embed = discord.Embed(title="Items In Queue", color=discord.Color.dark_blue())
+        embed = discord.Embed(title="Items In Queue", color=discord.Color.og_blurple())
         song_lst = '\n'.join(song_lst)  # Joining the list with newline as the delimiter
         embed.add_field(name="Songs:", value=song_lst)
         return await ctx.send(embed=embed)
