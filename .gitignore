@@ -127,3 +127,7 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# For the Lavalink jar and config yaml
+.yml
+.jar
