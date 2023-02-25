@@ -1,11 +1,12 @@
 import os
 import discord
 import asyncio
-from discord.ext import commands
-import wavelink
 import logging
+import wavelink
 import subprocess
+from discord.ext import commands
 
+TIMEOUT = 1200  # Amount of seconds before the bot disconnects due to nothing being played
 logging.basicConfig(level=logging.DEBUG)
 
 class VoiceConnectionError(commands.CommandError):
@@ -15,9 +16,10 @@ class InvalidVoiceChannel(VoiceConnectionError):
     """Exception for cases of invalid Voice Channels."""
 
 class MusicBot(commands.Cog):
-    vc : wavelink.Player = None
+    timer = None
     current_track = None
     music_channel = None
+    vc : wavelink.Player = None
     
     def __init__(self, bot):
         self.bot = bot
@@ -32,6 +34,12 @@ class MusicBot(commands.Cog):
             port=2333, 
             password=os.environ['SERVER_PASS']
         )
+
+    async def timeout(self):
+        await asyncio.sleep(TIMEOUT)
+        embed = discord.Embed(title="", description=f"Disconnecting due to inactivity", color=discord.Color.red())
+        await self.music_channel.send(embed=embed)
+        await self.vc.disconnect()
     
     @commands.Cog.listener()
     async def on_wavelink_node_ready(self, node: wavelink.Node):
@@ -39,19 +47,21 @@ class MusicBot(commands.Cog):
 
     @commands.Cog.listener()
     async def on_wavelink_track_end(self, player: wavelink.Player, track: wavelink.Track, reason):
+        # On the end of each track, reset the AFK timer
+        # If the queue is not empty, play next song
+        if self.timer is not None:
+            self.timer.cancel()
+            self.timer = None
+            logging.info("AFK timer reset")
         if not player.queue.is_empty:
             next_song = player.queue.get()
             embed = discord.Embed(title="", description=f"Now playing: {next_song.title}", color=discord.Color.green())
             await self.music_channel.send(embed=embed)
             await player.play(next_song)
-        else:
-            await asyncio.sleep(600)
-            if player.is_playing():
-                return
-            embed = discord.Embed(title="", description=f"Disconnecting due to inactivity", color=discord.Color.red())
-            await self.music_channel.send(embed=embed)
-            await player.disconnect()
-    
+        if player.is_playing() or not player.is_connected():
+            return
+        self.timer = asyncio.create_task(self.timeout())
+            
     @commands.command(name='join', aliases=['connect', 'j'], description="Joins the bot into the voice channel")
     async def join(self, ctx):
         await ctx.typing()
@@ -59,7 +69,7 @@ class MusicBot(commands.Cog):
         voice = ctx.message.author.voice
         if not voice:
             embed = discord.Embed(title="", description="You're not connected to a voice channel", color=discord.Color.red())
-            return await ctx.send(embed=embed) 
+            return await ctx.send(embed=embed)
         else:
             channel = voice.channel
             self.music_channel = ctx.message.channel
@@ -91,6 +101,10 @@ class MusicBot(commands.Cog):
         # Join channel if not connected
         if not self.vc or not self.vc.is_connected():
             await ctx.invoke(self.bot.get_command('join'))
+
+        # TODO: Add in playlist logic
+        if "playlist" in " ".join(title).lower():
+            logging.info("Playlist detected")
 
         # Add track to the queue, regardless of the bot playing
         chosen_track = await wavelink.YouTubeTrack.search(query=" ".join(title), return_first=True)
@@ -127,7 +141,7 @@ class MusicBot(commands.Cog):
         song_lst = list()
         temp_queue = self.vc.queue.copy()
         
-        for i in range(temp_queue.count):
+        for _ in range(temp_queue.count):
             song = temp_queue.get()
             seconds = int(song.length) % (24 * 3600) 
             hour = seconds // 3600
@@ -146,7 +160,7 @@ class MusicBot(commands.Cog):
         embed.add_field(name="Songs:", value=song_lst)
         return await ctx.send(embed=embed)
 
-    @commands.command(name='skip', aliases=['s'], description="Skips the current song")
+    @commands.command(name='skip', aliases=['s', 'next'], description="Skips the current song")
     async def skip(self, ctx):
         voice = ctx.message.author.voice
         if not voice:
@@ -205,6 +219,10 @@ class MusicBot(commands.Cog):
         elif not self.vc.queue.is_empty:
             self.vc.queue.clear()
         await self.vc.stop()
+        
+        await ctx.message.add_reaction('👍')
+
+    # TODO: Add in now playing command
         
     @commands.command(description="Sets the output volume")
     async def volume(self, ctx, new_volume : int = 100):
