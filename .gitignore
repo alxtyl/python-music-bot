@@ -131,3 +131,6 @@ dmypy.json
 # For the Lavalink jar and config yaml
 .yml
 .jar
+logs/spring.log.2023-02-25.0.gz
+application.yml
+Lavalink.jar
