@@ -1,6 +1,5 @@
 import os
 import re
-import copy
 import discord
 import asyncio
 import logging
@@ -59,10 +58,10 @@ class MusicBot(commands.Cog):
             self.timer = None
             logging.info("AFK timer reset")
         if not player.queue.is_empty and not player.is_playing():
-            next_song = player.queue.get()
+            self.current_track = player.queue.get()
             embed = discord.Embed(title="", description=f"Now playing [{self.current_track.title}]({self.current_track.info['uri']})", color=discord.Color.green())
             await self.music_channel.send(embed=embed)
-            await player.play(next_song)
+            await player.play(self.current_track)
         if player.is_playing() or not player.is_connected():
             return
         self.timer = asyncio.create_task(self.timeout())
@@ -152,7 +151,7 @@ class MusicBot(commands.Cog):
         except Exception as e:
             logging.error(f"Exception: {e}")
             embed = discord.Embed(title=f"Error", description="Something went wrong with the track you sent, please try again.", color=discord.Color.red())
-            embed.set_footer(text=f"If this persists ping Alex")
+            embed.set_footer(text="If this persists ping [Alex](https://upload.wikimedia.org/wikipedia/en/d/db/Guillotine_DG.jpg)")
             return await ctx.send(embed=embed)
             
     @commands.command(name='queue', aliases=['q', 'playlist', 'que'], description="Shows the queue")
@@ -176,12 +175,12 @@ class MusicBot(commands.Cog):
         pages = list()
         song_lst = list()
         song_count = 0
-        overall_count = 1
+        overall_count = 0
         temp_queue = self.vc.queue.copy()
-        num_pages = int((temp_queue.count // 10) + 1)
+        num_pages = int((self.vc.queue.count // 10) + 1)
         
-        # Build the queue w/ times & index
-        for _ in range(temp_queue.count):
+        # Build the queue w/ times & indext
+        for _ in range(self.vc.queue.count):
             song = temp_queue.get()
             seconds = int(song.length) % (24 * 3600) 
             hour = seconds // 3600
@@ -192,13 +191,13 @@ class MusicBot(commands.Cog):
                 duration = "%dh %02dm %02ds" % (hour, minutes, seconds)
             else:
                 duration = "%02dm %02ds" % (minutes, seconds)
-            song_formated = f"{overall_count}. {song.title} - {duration}"
+            song_formated = f"{overall_count+1}. {song.title} - {duration}"
             song_lst.append(song_formated)
 
             song_count += 1
             overall_count += 1
 
-            if song_count % 10 == 0 or overall_count == temp_queue.count:
+            if song_count % 10 == 0 or overall_count == self.vc.queue.count:
                 embed = discord.Embed(title="Items In Queue", color=discord.Color.blurple())
                 embed.add_field(name=f"Songs:", value='\n'.join(song_lst))
                 pages.append(embed)
@@ -206,8 +205,16 @@ class MusicBot(commands.Cog):
                 song_count = 0
                 song_lst.clear()
 
-        # Create the page(s) for users to scroll through
         cur_page = 1
+
+        if num_pages == 1:
+            message = await ctx.send(
+            content="",
+            embed=pages[cur_page - 1]
+            )
+            return
+
+        # Create the page(s) for users to scroll through
         message = await ctx.send(
             content=f"Page {cur_page}/{num_pages}\n",
             embed=pages[cur_page - 1]
