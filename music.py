@@ -1,13 +1,17 @@
 import os
 import re
+import copy
 import discord
 import asyncio
 import logging
 import wavelink
 import subprocess
+from random import randint
 from discord.ext import commands
 
-TIMEOUT = 1200  # Amount of seconds before the bot disconnects due to nothing being played
+AFK_TIMEOUT = 1200   # Amount of seconds before the bot disconnects due to nothing being played
+QUEUE_TIMEOUT = 180  # Time before users aren't able to interact with the queue pages
+PLAYLIST_REG = re.compile("(?:https?:\/\/)?(?:www\.)?youtube\.com\/playlist\?list=([a-zA-Z0-9_-]+)")  # Regex for matching a youtube playlist
 logging.getLogger().setLevel(logging.INFO)
 
 class VoiceConnectionError(commands.CommandError):
@@ -37,7 +41,7 @@ class MusicBot(commands.Cog):
         )
 
     async def timeout(self):
-        await asyncio.sleep(TIMEOUT)
+        await asyncio.sleep(AFK_TIMEOUT)
         embed = discord.Embed(title="", description=f"Disconnecting due to inactivity", color=discord.Color.red())
         await self.music_channel.send(embed=embed)
         await self.vc.disconnect()
@@ -56,7 +60,7 @@ class MusicBot(commands.Cog):
             logging.info("AFK timer reset")
         if not player.queue.is_empty:
             next_song = player.queue.get()
-            embed = discord.Embed(title="", description=f"Now playing [{self.current_track.title}]({self.current_track.info['uri']}) [{self.current_track.author}]", color=discord.Color.green())
+            embed = discord.Embed(title="", description=f"Now playing [{self.current_track.title}]({self.current_track.info['uri']})", color=discord.Color.green())
             await self.music_channel.send(embed=embed)
             await player.play(next_song)
         if player.is_playing() or not player.is_connected():
@@ -70,7 +74,8 @@ class MusicBot(commands.Cog):
         voice = ctx.message.author.voice
         if not voice or ctx.author.voice.channel is None or ctx.author.voice is None:
             embed = discord.Embed(title="", description="You're not connected to a voice channel", color=discord.Color.red())
-            return await ctx.send(embed=embed)
+            await ctx.send(embed=embed)
+            return False
 
         channel = voice.channel    
         voice_channel = ctx.author.voice.channel
@@ -113,7 +118,9 @@ class MusicBot(commands.Cog):
         try:
             # Join channel if not connected
             if not self.vc or not self.vc.is_connected():
-                await ctx.invoke(self.bot.get_command('join'))
+                resp = await ctx.invoke(self.bot.get_command('join'))
+                if resp == False:
+                    return
 
             if ctx.guild.voice_client.channel != ctx.message.author.voice.channel:
                 embed = discord.Embed(title="", description="You're not connected to the same voice channel as me", color=discord.Color.red())
@@ -121,37 +128,33 @@ class MusicBot(commands.Cog):
 
             user_input = " ".join(title)
 
-            # TODO: Add in playlist logic
-            if "/playlist" in user_input:
-                logging.info("Playlist identified")
+            if PLAYLIST_REG.match(user_input):
                 self.playlist = await wavelink.YouTubePlaylist.search(query=user_input)
-                print(self.playlist.tracks)
-                return
+                for track in self.playlist.tracks:
+                    self.vc.queue.put(track)
+                embed = discord.Embed(title="", description=f"Added {len(self.playlist.tracks)} tracks to the queue [{ctx.author.mention}]", color=discord.Color.green())
+                await ctx.send(embed=embed)
+            else:
+                chosen_track = await wavelink.YouTubeTrack.search(query=user_input, return_first=True)
+                if chosen_track:
+                    self.current_track = chosen_track
+                    if self.vc.is_playing() or not self.vc.queue.is_empty:
+                        embed = discord.Embed(title="", description=f"Queued [{self.current_track.title}]({self.current_track.info['uri']}) [{ctx.author.mention}]", color=discord.Color.green())
+                        await ctx.send(embed=embed)
+                    self.vc.queue.put(self.current_track)
 
-            # Add track to the queue, regardless of the bot playing
-            chosen_track = await wavelink.YouTubeTrack.search(query=user_input, return_first=True)
-            #print(f"Info for the track \n{chosen_track.info}\n")
-            #print(f"Id for the track {chosen_track.id}\n")
-            if chosen_track:
-                self.current_track = chosen_track
-                if self.vc.is_playing() or not self.vc.queue.is_empty:
-                    embed = discord.Embed(title="", description=f"Queued [{self.current_track.title}]({self.current_track.info['uri']}) [{ctx.author.mention}]", color=discord.Color.green())
-                    await ctx.send(embed=embed)
-                self.vc.queue.put(self.current_track)
-
-            # If bot isn't playing a song, play current song
             if not self.vc.is_playing():
                 self.current_track = self.vc.queue.get()
-                embed = discord.Embed(title="", description=f"Now playing [{self.current_track.title}]({self.current_track.info['uri']}) [{self.current_track.author}]", color=discord.Color.green())
+                embed = discord.Embed(title="", description=f"Now playing [{self.current_track.title}]({self.current_track.info['uri']})", color=discord.Color.green())
                 await ctx.send(embed=embed)
                 await self.vc.play(self.current_track)
+
         except Exception as e:
             logging.error(f"Exception: {e}")
-            embed = discord.Embed(title=f"Error playing \n{user_input}", description="Something went wrong with the track you sent, please try again.", color=discord.Color.red())
+            embed = discord.Embed(title=f"Error", description="Something went wrong with the track you sent, please try again.", color=discord.Color.red())
             embed.set_footer(text=f"If this persists ping Alex")
             return await ctx.send(embed=embed)
             
-
     @commands.command(name='queue', aliases=['q', 'playlist', 'que'], description="Shows the queue")
     async def queue(self, ctx):
         await ctx.typing()
@@ -167,12 +170,17 @@ class MusicBot(commands.Cog):
             embed = discord.Embed(title="", description="You're not connected to the same voice channel as me", color=discord.Color.red())
             return await ctx.send(embed=embed)
         if self.vc.queue.is_empty:
-            embed = discord.Embed(title="", description="The queue is empty", color=discord.Color.red())
+            embed = discord.Embed(title="", description="The queue is empty", color=discord.Color.blue())
             return await ctx.send(embed=embed)
 
+        pages = list()
         song_lst = list()
+        song_count = 0
+        overall_count = 1
         temp_queue = self.vc.queue.copy()
+        num_pages = int((temp_queue.count // 10) + 1)
         
+        # Build the queue w/ times & index
         for _ in range(temp_queue.count):
             song = temp_queue.get()
             seconds = int(song.length) % (24 * 3600) 
@@ -184,14 +192,53 @@ class MusicBot(commands.Cog):
                 duration = "%dh %02dm %02ds" % (hour, minutes, seconds)
             else:
                 duration = "%02dm %02ds" % (minutes, seconds)
-            # song_formated = str(song.title) + ' - ' + duration
-            song_formated = f"[{str(song.title)}]({song.info['uri']}) - {duration}"
+            song_formated = f"{overall_count}. {song.title} - {duration}"
             song_lst.append(song_formated)
-        
-        embed = discord.Embed(title="Items In Queue", color=discord.Color.blurple())
-        song_lst = '\n'.join(song_lst)  # Joining the list with newline as the delimiter
-        embed.add_field(name="Songs:", value=song_lst)
-        return await ctx.send(embed=embed)
+
+            song_count += 1
+            overall_count += 1
+
+            if song_count % 10 == 0 or overall_count == temp_queue.count:
+                embed = discord.Embed(title="Items In Queue", color=discord.Color.blurple())
+                embed.add_field(name=f"Songs:", value='\n'.join(song_lst))
+                pages.append(embed)
+                
+                song_count = 0
+                song_lst.clear()
+
+        # Create the page(s) for users to scroll through
+        cur_page = 1
+        message = await ctx.send(
+            content=f"Page {cur_page}/{num_pages}\n",
+            embed=pages[cur_page - 1]
+        )
+
+        await message.add_reaction("◀️")
+        await message.add_reaction("▶️")
+
+        while True:
+            try:
+                reaction, user = await self.bot.wait_for("reaction_add", timeout=QUEUE_TIMEOUT)
+
+                if str(reaction.emoji) == "▶️" and cur_page != num_pages:
+                    cur_page += 1
+                    await message.edit(
+                        content=f"Page {cur_page}/{num_pages}",
+                        embed=pages[cur_page - 1]
+                    )
+                    await message.remove_reaction(reaction, user)
+                elif str(reaction.emoji) == "◀️" and cur_page > 1:
+                    cur_page -= 1
+                    await message.edit(
+                        content=f"Page {cur_page}/{num_pages}",
+                        embed=pages[cur_page - 1])
+                    await message.remove_reaction(reaction, user)
+                else:
+                    await message.remove_reaction(reaction, user)
+
+            except asyncio.TimeoutError:
+                await message.delete()
+                break
 
     @commands.command(name="now_playing", aliases=["np"], description="Shows what's currently playing")
     async def now_playing(self, ctx):
@@ -219,9 +266,44 @@ class MusicBot(commands.Cog):
             duration = "%02dm %02ds" % (minutes, seconds)
         
         embed = discord.Embed(title="Now playing", color=discord.Color.blurple())
-        # [{self.current_track.title}]({self.current_track.info['uri']}
         embed.add_field(name="Current track:", value=f"[{str(self.vc.track.title)}]({self.vc.track.info['uri']}) - {duration}")
         return await ctx.send(embed=embed)
+
+    @commands.command(name="shuffle", aliases=["shuf"], description="Shuffles the queue")
+    async def shuffle(self, ctx):
+        voice = ctx.message.author.voice
+        if not voice:
+            embed = discord.Embed(title="", description="You're not connected to a voice channel", color=discord.Color.red())
+            return await ctx.send(embed=embed)
+        if not self.vc or not self.vc.is_connected():
+            embed = discord.Embed(title="", description="I'm not connected to a voice channel", color=discord.Color.red())
+            return await ctx.send(embed=embed)
+        if ctx.guild.voice_client.channel != ctx.message.author.voice.channel:
+            embed = discord.Embed(title="", description="You're not connected to the same voice channel as me", color=discord.Color.red())
+            return await ctx.send(embed=embed)
+        if self.vc.queue.is_empty:
+            embed = discord.Embed(title="", description="The queue is empty", color=discord.Color.red())
+            return await ctx.send(embed=embed)
+
+        arr = list()
+        num_items = self.vc.queue.count
+
+        # TODO: Optimize
+        # Populate list
+        for _ in range(num_items):
+            arr.append(self.vc.queue.pop())
+            
+        # Perform Fisher-Yates shuffle
+        for i in range(num_items-1,0,-1):
+            j = randint(0,i+1)
+
+            arr[i],arr[j] = arr[j],arr[i]
+
+        # Put shuffled list back into the queue
+        for track in arr:
+            self.vc.queue.put(track)
+
+        await ctx.message.add_reaction('👍')
 
     @commands.command(name='skip', aliases=['s', 'next'], description="Skips the current song")
     async def skip(self, ctx):
