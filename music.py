@@ -58,7 +58,7 @@ class MusicBot(commands.Cog):
             self.timer.cancel()
             self.timer = None
             logging.info("AFK timer reset")
-        if not player.queue.is_empty:
+        if not player.queue.is_empty and not player.is_playing():
             next_song = player.queue.get()
             embed = discord.Embed(title="", description=f"Now playing [{self.current_track.title}]({self.current_track.info['uri']})", color=discord.Color.green())
             await self.music_channel.send(embed=embed)
@@ -235,7 +235,6 @@ class MusicBot(commands.Cog):
                     await message.remove_reaction(reaction, user)
                 else:
                     await message.remove_reaction(reaction, user)
-
             except asyncio.TimeoutError:
                 await message.delete()
                 break
@@ -324,9 +323,9 @@ class MusicBot(commands.Cog):
             return await self.vc.stop()
 
         self.current_track = self.vc.queue.get()
-        await self.vc.play(self.current_track)
-
-        await ctx.message.add_reaction('👍')
+        embed = discord.Embed(title="", description=f"Now playing [{self.current_track.title}]({self.current_track.info['uri']})", color=discord.Color.green())
+        await self.music_channel.send(embed=embed)
+        return await self.vc.play(self.current_track)
 
     @commands.command(description="Resumes current paused song")
     async def resume(self, ctx):
