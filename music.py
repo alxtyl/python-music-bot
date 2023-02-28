@@ -135,7 +135,7 @@ class MusicBot(commands.Cog):
 
             user_input = " ".join(title)
 
-            if URL_REG.match(user_input):
+            if URL_REG.match(user_input):  # First, we check for cases where the url matters (like YT playlist, etc)
                 if YT_PLAYLIST_REG.match(user_input):
                     self.playlist = await wavelink.YouTubePlaylist.search(query=user_input)
                     for track in self.playlist.tracks:
@@ -165,14 +165,13 @@ class MusicBot(commands.Cog):
                             counter += 1
                         embed = discord.Embed(title="", description=f"Added {counter} tracks to the queue [{ctx.author.mention}]", color=discord.Color.green())
                         await ctx.send(embed=embed)
-                else:
-                    chosen_track = await wavelink.YouTubeTrack.search(query=user_input, return_first=True)
-                    if chosen_track:
-                        self.current_track = chosen_track
-                        if self.vc.is_playing() or not self.vc.queue.is_empty:
-                            embed = discord.Embed(title="", description=f"Queued [{self.current_track.title}]({self.current_track.info['uri']}) [{ctx.author.mention}]", color=discord.Color.green())
-                            await ctx.send(embed=embed)
-                        self.vc.queue.put(self.current_track)
+            chosen_track = await wavelink.YouTubeTrack.search(query=user_input, return_first=True)  # If the above checks failed, we assume our base case of playing a song off of YT
+            if chosen_track:
+                self.current_track = chosen_track
+                if self.vc.is_playing() or not self.vc.queue.is_empty:
+                    embed = discord.Embed(title="", description=f"Queued [{self.current_track.title}]({self.current_track.info['uri']}) [{ctx.author.mention}]", color=discord.Color.green())
+                    await ctx.send(embed=embed)
+                self.vc.queue.put(self.current_track)
 
             if not self.vc.is_playing():
                 self.current_track = self.vc.queue.get()
@@ -182,7 +181,7 @@ class MusicBot(commands.Cog):
 
         except Exception as e:
             logging.error(f"Exception: {e}")
-            embed = discord.Embed(title=f"Error", description="Something went wrong with the track you sent, please try again.", color=discord.Color.red())
+            embed = discord.Embed(title=f"Error", description=f"""Something went wrong with the track you sent, please try again.\nStack dump: {e}""", color=discord.Color.red())
             embed.set_footer(text="If this persists ping Alex")
             return await ctx.send(embed=embed)
             
