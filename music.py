@@ -49,7 +49,7 @@ class MusicBot(commands.Cog):
 
     async def timeout(self):
         await asyncio.sleep(AFK_TIMEOUT)
-        embed = discord.Embed(title="", description=f"Disconnecting due to inactivity", color=discord.Color.red())
+        embed = discord.Embed(title="", description=f"Disconnecting due to inactivity", color=discord.Color.blue())
         await self.music_channel.send(embed=embed)
         await self.vc.disconnect()
     
