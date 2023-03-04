@@ -17,6 +17,7 @@ QUEUE_TIMEOUT = 180  # Time before users aren't able to interact with the queue 
 URL_REG = re.compile("^(https?|ftp):\/\/[^\s\/$.?#].[^\s]*$")  # Regex for checking if a string is a url
 SPOT_REG = re.compile("^(?:https?:\/\/)?(?:www\.)?(?:open|play)\.spotify\.com\/.*$")  # Regex for checking if a string is a url from Spotify
 SOUND_REG = re.compile("^(?:https?:\/\/)?(?:www\.)?(?:m\.)?soundcloud\.com\/.*$")  # Regex for checking if a string is a url from Soundcloud
+SOUND_FILE_REG = re.compile("(?:https?:\/\/)?\S+(?:.mp3|.flac|.wav)")
 YT_NON_PLAYLIST_REG = re.compile("^(?:https?:\/\/)?(?:www\.)?(?:m\.)?youtu\.?be(?:\.com)?\/(?!playlist\?)(?:watch\?.*v=)?([a-zA-Z0-9_-]{11}).*$")  # Regex for checking if a string is a YouTube link (but not a playlist)
 YT_PLAYLIST_REG = re.compile("(?:https?:\/\/)?(?:www\.)?youtube\.com\/playlist\?list=([a-zA-Z0-9_-]+)")  # Regex for matching a YouTube playlist
 
@@ -51,9 +52,11 @@ class MusicBot(commands.Cog):
 
     async def timeout(self):
         await asyncio.sleep(AFK_TIMEOUT)
-        embed = discord.Embed(title="", description=f"Disconnecting due to inactivity", color=discord.Color.blue())
-        await self.music_channel.send(embed=embed)
-        await self.vc.disconnect()
+        if self.vc.is_playing() or not self.vc.is_connected:
+            embed = discord.Embed(title="", description=f"Disconnecting due to inactivity", color=discord.Color.blue())
+            await self.music_channel.send(embed=embed)
+            await self.vc.disconnect()
+        return
     
     @commands.Cog.listener()
     async def on_wavelink_node_ready(self, node: wavelink.Node):
@@ -136,66 +139,74 @@ class MusicBot(commands.Cog):
                 return await ctx.send(embed=embed)
 
             user_input = " ".join(title)
-
-            if URL_REG.match(user_input):  # Check for cases where the url matters
-                if YT_NON_PLAYLIST_REG.match(user_input):
-                    logging.info("Detected a YT link")
-                    self.current_track = (await wavelink.NodePool.get_node().get_tracks(wavelink.YouTubeTrack, user_input))[0]
-                    if self.vc.is_playing() or not self.vc.queue.is_empty:
-                        embed = discord.Embed(title="", description=f"Queued [{self.current_track.title}]({self.current_track.info['uri']}) [{ctx.author.mention}]", color=discord.Color.green())
-                        await ctx.send(embed=embed)
-                    self.vc.queue.put(self.current_track)
-
-                elif YT_PLAYLIST_REG.match(user_input):
-                    logging.info("Detected a YT link for a playlist")
-                    self.playlist = await wavelink.YouTubePlaylist.search(query=user_input)
-                    for track in self.playlist.tracks:
-                        self.vc.queue.put(track)
-                    embed = discord.Embed(title="", description=f"Added {len(self.playlist.tracks)} tracks to the queue [{ctx.author.mention}]", color=discord.Color.green())
-                    await ctx.send(embed=embed)
-
-                elif SPOT_REG.match(user_input):
-                    decoded = spotify.decode_url(user_input)
-                    if decoded and decoded['type'] is spotify.SpotifySearchType.track:
-                        self.current_track = await spotify.SpotifyTrack.search(query=decoded["id"], type=decoded["type"], return_first=True)
+            
+            if ctx.message.attachments == []:
+                if URL_REG.match(user_input):
+                    if YT_NON_PLAYLIST_REG.match(user_input):
+                        self.current_track = (await wavelink.NodePool.get_node().get_tracks(wavelink.YouTubeTrack, user_input))[0]
                         if self.vc.is_playing() or not self.vc.queue.is_empty:
                             embed = discord.Embed(title="", description=f"Queued [{self.current_track.title}]({self.current_track.info['uri']}) [{ctx.author.mention}]", color=discord.Color.green())
                             await ctx.send(embed=embed)
                         self.vc.queue.put(self.current_track)
-                    elif decoded and decoded['type'] is spotify.SpotifySearchType.album:
-                        embed = discord.Embed(title="", description="Searching, this may take a bit", color=discord.Color.blurple())
-                        await ctx.send(embed=embed, delete_after=60)
-                        counter = 0
-                        async for track in spotify.SpotifyTrack.iterator(query=user_input, type=decoded['type']):
+
+                    elif YT_PLAYLIST_REG.match(user_input):
+                        self.playlist = await wavelink.YouTubePlaylist.search(query=user_input)
+                        for track in self.playlist.tracks:
                             self.vc.queue.put(track)
-                            counter += 1
-                        embed = discord.Embed(title="", description=f"Added {counter} tracks to the queue [{ctx.author.mention}]", color=discord.Color.green())
-                        await ctx.send(embed=embed)
-                    elif decoded and decoded['type'] is spotify.SpotifySearchType.playlist:
-                        embed = discord.Embed(title="", description="Searching, this may take a bit", color=discord.Color.blurple())
-                        await ctx.send(embed=embed, delete_after=60)
-                        counter = 0
-                        async for track in spotify.SpotifyTrack.iterator(query=user_input, type=decoded['type']):
-                            self.vc.queue.put(track)
-                            counter += 1
-                        embed = discord.Embed(title="", description=f"Added {counter} tracks to the queue [{ctx.author.mention}]", color=discord.Color.green())
+                        embed = discord.Embed(title="", description=f"Added {len(self.playlist.tracks)} tracks to the queue [{ctx.author.mention}]", color=discord.Color.green())
                         await ctx.send(embed=embed)
 
-                elif SOUND_REG.match(user_input):
-                    self.current_track = (await wavelink.NodePool.get_node().get_tracks(wavelink.SoundCloudTrack, user_input))[0]
-                    if self.vc.is_playing() or not self.vc.queue.is_empty:
-                        embed = discord.Embed(title="", description=f"Queued [{self.current_track.title}]({self.current_track.info['uri']}) [{ctx.author.mention}]", color=discord.Color.green())
-                        await ctx.send(embed=embed)
-                    self.vc.queue.put(self.current_track)
-    
-            elif not URL_REG.match(user_input):
-                chosen_track = await wavelink.YouTubeTrack.search(query=user_input, return_first=True) 
-                if chosen_track:
-                    self.current_track = chosen_track
-                    if self.vc.is_playing() or not self.vc.queue.is_empty:
-                        embed = discord.Embed(title="", description=f"Queued [{self.current_track.title}]({self.current_track.info['uri']}) [{ctx.author.mention}]", color=discord.Color.green())
-                        await ctx.send(embed=embed)
-                    self.vc.queue.put(self.current_track)
+                    elif SPOT_REG.match(user_input):
+                        decoded = spotify.decode_url(user_input)
+                        if decoded and decoded['type'] is spotify.SpotifySearchType.track:
+                            self.current_track = await spotify.SpotifyTrack.search(query=decoded["id"], type=decoded["type"], return_first=True)
+                            if self.vc.is_playing() or not self.vc.queue.is_empty:
+                                embed = discord.Embed(title="", description=f"Queued [{self.current_track.title}]({self.current_track.info['uri']}) [{ctx.author.mention}]", color=discord.Color.green())
+                                await ctx.send(embed=embed)
+                            self.vc.queue.put(self.current_track)
+
+                        elif decoded and (decoded['type'] is spotify.SpotifySearchType.album or decoded['type'] is spotify.SpotifySearchType.playlist):
+                            embed = discord.Embed(title="", description="Searching, this may take a bit", color=discord.Color.blurple())
+                            await ctx.send(embed=embed, delete_after=60)
+                            counter = 0
+                            async for track in spotify.SpotifyTrack.iterator(query=user_input, type=decoded['type']):
+                                self.vc.queue.put(track)
+                                counter += 1
+                            embed = discord.Embed(title="", description=f"Added {counter} tracks to the queue [{ctx.author.mention}]", color=discord.Color.green())
+                            await ctx.send(embed=embed)
+
+                    elif SOUND_REG.match(user_input):
+                        if '/sets/' in user_input:
+                            embed = discord.Embed(title="", description=f"Sets/Playlists from Soundcloud are not supported", color=discord.Color.red())
+                            return await ctx.send(embed=embed)
+                        self.current_track = (await wavelink.NodePool.get_node().get_tracks(wavelink.SoundCloudTrack, user_input))[0]
+                        if self.vc.is_playing() or not self.vc.queue.is_empty:
+                            embed = discord.Embed(title="", description=f"Queued [{self.current_track.title}]({self.current_track.info['uri']}) [{ctx.author.mention}]", color=discord.Color.green())
+                            await ctx.send(embed=embed)
+                        self.vc.queue.put(self.current_track)
+
+                    # TODO: See if it's possible to display actual title instead of "Unknown title"
+                    elif SOUND_FILE_REG.match(user_input):
+                        self.current_track = await self.vc.node.get_tracks(query=user_input, cls=wavelink.LocalTrack)
+                        if self.vc.is_playing() or not self.vc.queue.is_empty:
+                            embed = discord.Embed(title="", description=f"Queued [{self.current_track.title}]({self.current_track.info['uri']}) [{ctx.author.mention}]", color=discord.Color.green())
+                            await ctx.send(embed=embed)
+                        self.vc.queue.put(self.current_track[0])
+
+                elif not URL_REG.match(user_input):
+                    chosen_track = await wavelink.YouTubeTrack.search(query=user_input, return_first=True) 
+                    if chosen_track:
+                        self.current_track = chosen_track
+                        if self.vc.is_playing() or not self.vc.queue.is_empty:
+                            embed = discord.Embed(title="", description=f"Queued [{self.current_track.title}]({self.current_track.info['uri']}) [{ctx.author.mention}]", color=discord.Color.green())
+                            await ctx.send(embed=embed)
+                        self.vc.queue.put(self.current_track)
+            else:  # TODO: See if it's possible to display actual title instead of "Unknown title"
+                self.current_track = await self.vc.node.get_tracks(query=ctx.message.attachments[0].url, cls=wavelink.LocalTrack)
+                if self.vc.is_playing() or not self.vc.queue.is_empty:
+                    embed = discord.Embed(title="", description=f"Queued [{self.current_track.title}]({self.current_track.info['uri']}) [{ctx.author.mention}]", color=discord.Color.green())
+                    await ctx.send(embed=embed)
+                self.vc.queue.put(self.current_track[0])
 
             if not self.vc.is_playing():
                 self.current_track = self.vc.queue.get()
@@ -370,7 +381,7 @@ class MusicBot(commands.Cog):
         await ctx.message.add_reaction('👍')
 
     @commands.command(name='remove', aliases=['rm'], description="Removes a song from the queue")
-    async def remove(self, ctx, *input : str):
+    async def remove(self, ctx, *user_input : str):
         voice = ctx.message.author.voice
         if not voice:
             embed = discord.Embed(title="", description="You're not connected to a voice channel", color=discord.Color.red())
@@ -385,10 +396,13 @@ class MusicBot(commands.Cog):
             embed = discord.Embed(title="", description="The queue is empty", color=discord.Color.red())
             return await ctx.send(embed=embed)
         
-        input = " ".join(input)
-        rm_track_num = int(input)
+        if not user_input:
+            return
 
-        if not input.isdigit() or rm_track_num > self.vc.queue.count or rm_track_num == 0:
+        user_input = " ".join(user_input)
+        rm_track_num = int(user_input)
+
+        if not user_input.isdigit() or rm_track_num > self.vc.queue.count or rm_track_num == 0:
             embed = discord.Embed(title="", description="Please send a valid track to remove", color=discord.Color.red())
             return await ctx.send(embed=embed)
 
