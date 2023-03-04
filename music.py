@@ -14,9 +14,11 @@ logging.getLogger().setLevel(logging.INFO)
 AFK_TIMEOUT = 1200   # Amount of seconds before the bot disconnects due to nothing being played
 QUEUE_TIMEOUT = 180  # Time before users aren't able to interact with the queue pages
 
-URL_REG = re.compile("^(https?|ftp):\/\/[^\s\/$.?#].[^\s]*$")                                            # Regex for checking if a string is a url
-SPOT_REG = re.compile("^(?:https?:\/\/)?(?:www\.)?(?:open|play)\.spotify\.com\/.*$")                     # Regex for checking if a string is a url from Spotify
-YT_PLAYLIST_REG = re.compile("(?:https?:\/\/)?(?:www\.)?youtube\.com\/playlist\?list=([a-zA-Z0-9_-]+)")  # Regex for matching a youtube playlist
+URL_REG = re.compile("^(https?|ftp):\/\/[^\s\/$.?#].[^\s]*$")  # Regex for checking if a string is a url
+SPOT_REG = re.compile("^(?:https?:\/\/)?(?:www\.)?(?:open|play)\.spotify\.com\/.*$")  # Regex for checking if a string is a url from Spotify
+SOUND_REG = re.compile("^(?:https?:\/\/)?(?:www\.)?(?:m\.)?soundcloud\.com\/.*$")  # Regex for checking if a string is a url from Soundcloud
+YT_NON_PLAYLIST_REG = re.compile("^(?:https?:\/\/)?(?:www\.)?(?:m\.)?youtu\.?be(?:\.com)?\/(?!playlist\?)(?:watch\?.*v=)?([a-zA-Z0-9_-]{11}).*$")  # Regex for checking if a string is a YouTube link (but not a playlist)
+YT_PLAYLIST_REG = re.compile("(?:https?:\/\/)?(?:www\.)?youtube\.com\/playlist\?list=([a-zA-Z0-9_-]+)")  # Regex for matching a YouTube playlist
 
 
 class VoiceConnectionError(commands.CommandError):
@@ -135,18 +137,31 @@ class MusicBot(commands.Cog):
 
             user_input = " ".join(title)
 
-            if URL_REG.match(user_input):  # First, we check for cases where the url matters (like YT playlist, etc)
-                if YT_PLAYLIST_REG.match(user_input):
+            if URL_REG.match(user_input):  # Check for cases where the url matters
+                if YT_NON_PLAYLIST_REG.match(user_input):
+                    logging.info("Detected a YT link")
+                    self.current_track = (await wavelink.NodePool.get_node().get_tracks(wavelink.YouTubeTrack, user_input))[0]
+                    if self.vc.is_playing() or not self.vc.queue.is_empty:
+                        embed = discord.Embed(title="", description=f"Queued [{self.current_track.title}]({self.current_track.info['uri']}) [{ctx.author.mention}]", color=discord.Color.green())
+                        await ctx.send(embed=embed)
+                    self.vc.queue.put(self.current_track)
+
+                elif YT_PLAYLIST_REG.match(user_input):
+                    logging.info("Detected a YT link for a playlist")
                     self.playlist = await wavelink.YouTubePlaylist.search(query=user_input)
                     for track in self.playlist.tracks:
                         self.vc.queue.put(track)
                     embed = discord.Embed(title="", description=f"Added {len(self.playlist.tracks)} tracks to the queue [{ctx.author.mention}]", color=discord.Color.green())
                     await ctx.send(embed=embed)
+
                 elif SPOT_REG.match(user_input):
                     decoded = spotify.decode_url(user_input)
                     if decoded and decoded['type'] is spotify.SpotifySearchType.track:
-                        track = await spotify.SpotifyTrack.search(query=decoded["id"], type=decoded["type"], return_first=True)
-                        self.vc.queue.put(track)
+                        self.current_track = await spotify.SpotifyTrack.search(query=decoded["id"], type=decoded["type"], return_first=True)
+                        if self.vc.is_playing() or not self.vc.queue.is_empty:
+                            embed = discord.Embed(title="", description=f"Queued [{self.current_track.title}]({self.current_track.info['uri']}) [{ctx.author.mention}]", color=discord.Color.green())
+                            await ctx.send(embed=embed)
+                        self.vc.queue.put(self.current_track)
                     elif decoded and decoded['type'] is spotify.SpotifySearchType.album:
                         embed = discord.Embed(title="", description="Searching, this may take a bit", color=discord.Color.blurple())
                         await ctx.send(embed=embed, delete_after=60)
@@ -165,13 +180,22 @@ class MusicBot(commands.Cog):
                             counter += 1
                         embed = discord.Embed(title="", description=f"Added {counter} tracks to the queue [{ctx.author.mention}]", color=discord.Color.green())
                         await ctx.send(embed=embed)
-            chosen_track = await wavelink.YouTubeTrack.search(query=user_input, return_first=True)  # If the above checks failed, we assume our base case of playing a song off of YT
-            if chosen_track:
-                self.current_track = chosen_track
-                if self.vc.is_playing() or not self.vc.queue.is_empty:
-                    embed = discord.Embed(title="", description=f"Queued [{self.current_track.title}]({self.current_track.info['uri']}) [{ctx.author.mention}]", color=discord.Color.green())
-                    await ctx.send(embed=embed)
-                self.vc.queue.put(self.current_track)
+
+                elif SOUND_REG.match(user_input):
+                    self.current_track = (await wavelink.NodePool.get_node().get_tracks(wavelink.SoundCloudTrack, user_input))[0]
+                    if self.vc.is_playing() or not self.vc.queue.is_empty:
+                        embed = discord.Embed(title="", description=f"Queued [{self.current_track.title}]({self.current_track.info['uri']}) [{ctx.author.mention}]", color=discord.Color.green())
+                        await ctx.send(embed=embed)
+                    self.vc.queue.put(self.current_track)
+    
+            elif not URL_REG.match(user_input):
+                chosen_track = await wavelink.YouTubeTrack.search(query=user_input, return_first=True) 
+                if chosen_track:
+                    self.current_track = chosen_track
+                    if self.vc.is_playing() or not self.vc.queue.is_empty:
+                        embed = discord.Embed(title="", description=f"Queued [{self.current_track.title}]({self.current_track.info['uri']}) [{ctx.author.mention}]", color=discord.Color.green())
+                        await ctx.send(embed=embed)
+                    self.vc.queue.put(self.current_track)
 
             if not self.vc.is_playing():
                 self.current_track = self.vc.queue.get()
@@ -206,8 +230,8 @@ class MusicBot(commands.Cog):
         pages = list()
         song_lst = list()
         song_count = 0
-        temp_queue = self.vc.queue.copy()
         queue_cnt = self.vc.queue.count
+        temp_queue = self.vc.queue.copy()
         num_pages = int((queue_cnt // 10) + 1)
         
         # Build the queue w/ times & indext
@@ -322,22 +346,25 @@ class MusicBot(commands.Cog):
             embed = discord.Embed(title="", description="The queue is empty", color=discord.Color.red())
             return await ctx.send(embed=embed)
 
-        arr = list()
+        songs = list()
         num_items = self.vc.queue.count
 
-        # TODO: Optimize
+        if num_items <= 1:
+            embed = discord.Embed(title="", description="Not enought tracks to shuffle in the queue", color=discord.Color.blue())
+            return await ctx.send(embed=embed)
+
         # Populate list
         for _ in range(num_items):
-            arr.append(self.vc.queue.pop())
+            songs.append(self.vc.queue.get())
             
         # Perform Fisher-Yates shuffle
         for i in range(num_items-1,0,-1):
-            j = randint(0,i+1)
+            j = randint(0, i+1)
 
-            arr[i],arr[j] = arr[j],arr[i]
+            songs[i], songs[j] = songs[j], songs[i]
 
         # Put shuffled list back into the queue
-        for track in arr:
+        for track in songs:
             self.vc.queue.put(track)
 
         await ctx.message.add_reaction('👍')
@@ -470,6 +497,8 @@ class MusicBot(commands.Cog):
             embed = discord.Embed(title="", description="You're not connected to a voice channel", color=discord.Color.red())
             return await ctx.send(embed=embed)
         await self.vc.set_volume(new_volume)
+
+        await ctx.message.add_reaction('👍')
 
     @commands.command(description="Displays system info", aliases=["spec"])
     async def info(self, ctx):
