@@ -1,5 +1,4 @@
 import os
-import re
 import discord
 import asyncio
 import logging
@@ -9,18 +8,10 @@ from random import randint
 from wavelink.ext import spotify
 from discord.ext import commands
 
+from global_vars.regex import *
+from global_vars.timeout import *
+
 logging.getLogger().setLevel(logging.INFO)
-
-AFK_TIMEOUT = 1200   # Amount of seconds before the bot disconnects due to nothing being played
-QUEUE_TIMEOUT = 180  # Time before users aren't able to interact with the queue pages
-
-URL_REG = re.compile("^(https?|ftp):\/\/[^\s\/$.?#].[^\s]*$")  # Regex for checking if a string is a url
-SPOT_REG = re.compile("^(?:https?:\/\/)?(?:www\.)?(?:open|play)\.spotify\.com\/.*$")  # Regex for checking if a string is a url from Spotify
-SOUND_REG = re.compile("^(?:https?:\/\/)?(?:www\.)?(?:m\.)?soundcloud\.com\/.*$")  # Regex for checking if a string is a url from Soundcloud
-SOUND_FILE_REG = re.compile("(?:https?:\/\/)?\S+(?:.mp3|.flac|.wav)")
-YT_NON_PLAYLIST_REG = re.compile("^(?:https?:\/\/)?(?:www\.)?(?:m\.)?youtu\.?be(?:\.com)?\/(?!playlist\?)(?:watch\?.*v=)?([a-zA-Z0-9_-]{11}).*$")  # Regex for checking if a string is a YouTube link (but not a playlist)
-YT_PLAYLIST_REG = re.compile("(?:https?:\/\/)?(?:www\.)?youtube\.com\/playlist\?list=([a-zA-Z0-9_-]+)")  # Regex for matching a YouTube playlist
-
 
 class VoiceConnectionError(commands.CommandError):
     """Custom Exception class for connection errors."""
@@ -50,13 +41,12 @@ class MusicBot(commands.Cog):
                                                     client_secret=os.environ['SPOTIFY_SECRET'])
         )
 
-    async def timeout(self):
+    async def timeout(self) -> None:
         await asyncio.sleep(AFK_TIMEOUT)
-        if not self.vc.is_playing() and self.vc.is_connected:
+        if self.vc.is_connected() and not self.vc.is_playing():
             embed = discord.Embed(title="", description=f"Disconnecting due to inactivity", color=discord.Color.blue())
             await self.music_channel.send(embed=embed)
             return await self.vc.disconnect()
-        return
     
     @commands.Cog.listener()
     async def on_wavelink_node_ready(self, node: wavelink.Node):
@@ -513,16 +503,6 @@ class MusicBot(commands.Cog):
         await self.vc.set_volume(new_volume)
 
         await ctx.message.add_reaction('👍')
-
-    @commands.command(description="Displays system info", aliases=["spec"])
-    async def info(self, ctx):
-        py_ver = subprocess.check_output('python3 --version', shell=True).decode('utf-8').strip()
-        sys_info = subprocess.check_output('lsb_release -d', shell=True).decode('utf-8').split('\t')[1].strip()
-
-        embed = discord.Embed(title="Currently running:", color=discord.Color.blurple())
-        info_lst = '\n'.join([py_ver, sys_info])  # Joining the list with newline as the delimiter
-        embed.add_field(name="System info", value=info_lst)
-        return await ctx.send(embed=embed)
 
 async def setup(bot):
     music_bot = MusicBot(bot)

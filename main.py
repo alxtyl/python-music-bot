@@ -19,6 +19,7 @@ def run():
     async def on_ready():
         await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name='for !'))
         await bot.load_extension("music")
+        await bot.load_extension("misc")
 
     bot.run(os.environ['BOT_KEY'], root_logger=True)
 
