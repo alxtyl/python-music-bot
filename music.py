@@ -52,10 +52,10 @@ class MusicBot(commands.Cog):
 
     async def timeout(self):
         await asyncio.sleep(AFK_TIMEOUT)
-        if self.vc.is_playing() or not self.vc.is_connected:
+        if not self.vc.is_playing() and self.vc.is_connected:
             embed = discord.Embed(title="", description=f"Disconnecting due to inactivity", color=discord.Color.blue())
             await self.music_channel.send(embed=embed)
-            await self.vc.disconnect()
+            return await self.vc.disconnect()
         return
     
     @commands.Cog.listener()
@@ -201,7 +201,7 @@ class MusicBot(commands.Cog):
                             embed = discord.Embed(title="", description=f"Queued [{self.current_track.title}]({self.current_track.info['uri']}) [{ctx.author.mention}]", color=discord.Color.green())
                             await ctx.send(embed=embed)
                         self.vc.queue.put(self.current_track)
-            else:  # TODO: See if it's possible to display actual title instead of "Unknown title"
+            else: # TODO: See if it's possible to display actual title instead of "Unknown title"
                 self.current_track = await self.vc.node.get_tracks(query=ctx.message.attachments[0].url, cls=wavelink.LocalTrack)
                 if self.vc.is_playing() or not self.vc.queue.is_empty:
                     embed = discord.Embed(title="", description=f"Queued [{self.current_track.title}]({self.current_track.info['uri']}) [{ctx.author.mention}]", color=discord.Color.green())
