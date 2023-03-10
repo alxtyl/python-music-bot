@@ -1,6 +1,6 @@
 """
+Script used to init the bot
 Before running, start lavalink server.
-Currently working with Lavalink v3.5.1
 """
 
 import os
