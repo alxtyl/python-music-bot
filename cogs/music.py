@@ -3,7 +3,6 @@ import discord
 import asyncio
 import logging
 import wavelink
-import subprocess
 from random import randint
 from wavelink.ext import spotify
 from discord.ext import commands
@@ -47,6 +46,10 @@ class MusicBot(commands.Cog):
             embed = discord.Embed(title="", description=f"Disconnecting due to inactivity", color=discord.Color.blue())
             await self.music_channel.send(embed=embed)
             return await self.vc.disconnect()
+
+    def _is_connected(self, ctx):
+        voice_client = discord.utils.get(ctx.bot.voice_clients, guild=ctx.guild)
+        return voice_client and voice_client.is_connected()
     
     @commands.Cog.listener()
     async def on_wavelink_node_ready(self, node: wavelink.Node):
@@ -118,8 +121,7 @@ class MusicBot(commands.Cog):
     @commands.command(name='play', aliases=['sing','p'], description="Plays a track from YouTube")
     async def play(self, ctx, *title : str):
         try:
-            # Join channel if not connected
-            if not self.vc or not self.vc.is_connected():
+            if not self._is_connected(ctx):
                 resp = await ctx.invoke(self.bot.get_command('join'))
                 if resp == False:
                     return
@@ -205,7 +207,7 @@ class MusicBot(commands.Cog):
                 await self.vc.play(self.current_track)
 
         except Exception as e:
-            logging.error(f"Exception: {e}")
+            logging.error(e, exc_info=True)
             embed = discord.Embed(title=f"Error", description=f"""Something went wrong with the track you sent, please try again.\nStack dump: {e}""", color=discord.Color.red())
             embed.set_footer(text="If this persists ping Alex")
             return await ctx.send(embed=embed)
