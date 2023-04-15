@@ -180,6 +180,7 @@ class MusicBot(commands.Cog):
                     # TODO: See if it's possible to display actual title instead of "Unknown title"
                     elif SOUND_FILE_REG.match(user_input):
                         self.current_track = await self.vc.node.get_tracks(query=user_input, cls=wavelink.LocalTrack)
+                        logging.info(self.current_track)
                         if self.vc.is_playing() or not self.vc.queue.is_empty:
                             embed = discord.Embed(title="", description=f"Queued [{self.current_track.title}]({self.current_track.info['uri']}) [{ctx.author.mention}]", color=discord.Color.green())
                             await ctx.send(embed=embed)
@@ -195,6 +196,7 @@ class MusicBot(commands.Cog):
                         self.vc.queue.put(self.current_track)
             else: # TODO: See if it's possible to display actual title instead of "Unknown title"
                 self.current_track = await self.vc.node.get_tracks(query=ctx.message.attachments[0].url, cls=wavelink.LocalTrack)
+                logging.info(self.current_track)
                 if self.vc.is_playing() or not self.vc.queue.is_empty:
                     embed = discord.Embed(title="", description=f"Queued [{self.current_track.title}]({self.current_track.info['uri']}) [{ctx.author.mention}]", color=discord.Color.green())
                     await ctx.send(embed=embed)
