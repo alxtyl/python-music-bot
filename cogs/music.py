@@ -122,8 +122,7 @@ class MusicBot(commands.Cog):
     async def play(self, ctx, *title : str):
         try:
             if not self._is_connected(ctx):
-                resp = await ctx.invoke(self.bot.get_command('join'))
-                if resp == False:
+                if await ctx.invoke(self.bot.get_command('join')) == False:
                     return
 
             if ctx.guild.voice_client.channel != ctx.message.author.voice.channel:
@@ -134,7 +133,7 @@ class MusicBot(commands.Cog):
             
             if ctx.message.attachments == []:
                 if URL_REG.match(user_input):
-                    if YT_NON_PLAYLIST_REG.match(user_input):
+                    if YT_NON_PLAYLIST_REG.match(user_input) or YT_SHORT_REG.match(user_input):
                         self.current_track = (await wavelink.NodePool.get_node().get_tracks(wavelink.YouTubeTrack, user_input))[0]
                         if self.vc.is_playing() or not self.vc.queue.is_empty:
                             embed = discord.Embed(title="", description=f"Queued [{self.current_track.title}]({self.current_track.info['uri']}) [{ctx.author.mention}]", color=discord.Color.green())
@@ -180,13 +179,12 @@ class MusicBot(commands.Cog):
                     # TODO: See if it's possible to display actual title instead of "Unknown title"
                     elif SOUND_FILE_REG.match(user_input):
                         self.current_track = await self.vc.node.get_tracks(query=user_input, cls=wavelink.LocalTrack)
-                        logging.info(self.current_track)
                         if self.vc.is_playing() or not self.vc.queue.is_empty:
-                            embed = discord.Embed(title="", description=f"Queued [{self.current_track.title}]({self.current_track.info['uri']}) [{ctx.author.mention}]", color=discord.Color.green())
+                            embed = discord.Embed(title="", description=f"Queued [{self.current_track[0].title}]({self.current_track[0].info['uri']}) [{ctx.author.mention}]", color=discord.Color.green())
                             await ctx.send(embed=embed)
                         self.vc.queue.put(self.current_track[0])
 
-                elif not URL_REG.match(user_input):
+                else:
                     chosen_track = await wavelink.YouTubeTrack.search(query=user_input, return_first=True) 
                     if chosen_track:
                         self.current_track = chosen_track
@@ -196,9 +194,8 @@ class MusicBot(commands.Cog):
                         self.vc.queue.put(self.current_track)
             else: # TODO: See if it's possible to display actual title instead of "Unknown title"
                 self.current_track = await self.vc.node.get_tracks(query=ctx.message.attachments[0].url, cls=wavelink.LocalTrack)
-                logging.info(self.current_track)
                 if self.vc.is_playing() or not self.vc.queue.is_empty:
-                    embed = discord.Embed(title="", description=f"Queued [{self.current_track.title}]({self.current_track.info['uri']}) [{ctx.author.mention}]", color=discord.Color.green())
+                    embed = discord.Embed(title="", description=f"Queued [{self.current_track[0].title}]({self.current_track[0].info['uri']}) [{ctx.author.mention}]", color=discord.Color.green())
                     await ctx.send(embed=embed)
                 self.vc.queue.put(self.current_track[0])
 
