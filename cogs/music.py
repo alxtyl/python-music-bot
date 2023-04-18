@@ -118,7 +118,7 @@ class MusicBot(commands.Cog):
         server = ctx.message.guild.voice_client
         await server.disconnect()
             
-    @commands.command(name='play', aliases=['sing','p'], description="Plays a track from YouTube")
+    @commands.command(name='play', aliases=['sing','p'], description="Plays a given input if it's valid")
     async def play(self, ctx, *title : str):
         try:
             if not self._is_connected(ctx):
@@ -236,7 +236,7 @@ class MusicBot(commands.Cog):
         temp_queue = self.vc.queue.copy()
         num_pages = int((queue_cnt // 10) + 1)
         
-        # Build the queue w/ times & indext
+        # Build the queue w/ times & index
         for i in range(queue_cnt):
             song_count += 1
             song_num = i + 1
@@ -271,7 +271,7 @@ class MusicBot(commands.Cog):
             )
             return
 
-        # Create the page(s) for users to scroll through
+        # Create the page(s) for user(s) to scroll through
         message = await ctx.send(
             content=f"Page {cur_page}/{num_pages}\n",
             embed=pages[cur_page - 1]
