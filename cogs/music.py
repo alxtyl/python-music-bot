@@ -119,7 +119,7 @@ class MusicBot(commands.Cog):
         await server.disconnect()
             
     @commands.command(name='play', aliases=['sing','p'], description="Plays a given input if it's valid")
-    async def play(self, ctx, *title : str):
+    async def play(self, ctx, *, title : str):
         try:
             if not self._is_connected(ctx):
                 if await ctx.invoke(self.bot.get_command('join')) == False:
