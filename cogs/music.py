@@ -119,7 +119,7 @@ class MusicBot(commands.Cog):
         await server.disconnect()
             
     @commands.command(name='play', aliases=['sing','p'], description="Plays a given input if it's valid")
-    async def play(self, ctx, *, title : str):
+    async def play(self, ctx, *, user_input : str):
         try:
             if not self._is_connected(ctx):
                 if await ctx.invoke(self.bot.get_command('join')) == False:
@@ -128,8 +128,6 @@ class MusicBot(commands.Cog):
             if ctx.guild.voice_client.channel != ctx.message.author.voice.channel:
                 embed = discord.Embed(title="", description="You're not connected to the same voice channel as me", color=discord.Color.red())
                 return await ctx.send(embed=embed)
-
-            user_input = " ".join(title)
             
             if ctx.message.attachments == []:
                 if URL_REG.match(user_input):
