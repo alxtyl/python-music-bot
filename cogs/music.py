@@ -46,17 +46,38 @@ class MusicBot(commands.Cog):
             embed = discord.Embed(title="", description=f"Disconnecting due to inactivity", color=discord.Color.blue())
             await self.music_channel.send(embed=embed)
             return await self.vc.disconnect()
+        
+    async def validate_command(self, ctx) -> bool:
+        """
+        Checks to make sure user is performing
+        a valid action before executing command
+        """
+        voice = ctx.message.author.voice
+        if not voice:
+            embed = discord.Embed(title="", description="You're not connected to a voice channel", color=discord.Color.red())
+            await ctx.send(embed=embed)
+            return False
+        if not self.vc or not self.vc.is_connected():
+            embed = discord.Embed(title="", description="I'm not connected to a voice channel", color=discord.Color.red())
+            await ctx.send(embed=embed)
+            return False
+        if ctx.guild.voice_client.channel != ctx.message.author.voice.channel:
+            embed = discord.Embed(title="", description="You're not connected to the same voice channel as me", color=discord.Color.red())
+            await ctx.send(embed=embed)
+            return False
+        
+        return True
 
     def _is_connected(self, ctx):
         voice_client = discord.utils.get(ctx.bot.voice_clients, guild=ctx.guild)
         return voice_client and voice_client.is_connected()
-    
+
     @commands.Cog.listener()
     async def on_wavelink_node_ready(self, node: wavelink.Node):
         logging.info(f"{node} is ready")
 
     @commands.Cog.listener()
-    async def on_wavelink_track_end(self, player: wavelink.Player, track: wavelink.Track, reason):
+    async def on_wavelink_track_end(self, player: wavelink.Player):
         # On the end of each track, reset the AFK timer
         # If the queue is not empty, play next song
         if self.timer is not None:
@@ -100,17 +121,9 @@ class MusicBot(commands.Cog):
 
     @commands.command(name='leave', aliases=["dc", "disconnect", "bye"], description="Leaves the channel")
     async def leave(self, ctx):
-        # Make sure user is conn to voice channel
-        voice = ctx.message.author.voice
-        if not voice:
-            embed = discord.Embed(title="", description="You're not connected to a voice channel", color=discord.Color.red())
-            return await ctx.send(embed=embed)
-        if not self.vc or not self.vc.is_connected():
-            embed = discord.Embed(title="", description="I'm not connected to a voice channel", color=discord.Color.red())
-            return await ctx.send(embed=embed)
-        if ctx.guild.voice_client.channel != ctx.message.author.voice.channel:
-            embed = discord.Embed(title="", description="You're not connected to the same voice channel as me", color=discord.Color.red())
-            return await ctx.send(embed=embed)
+        if not await self.validate_command(ctx):
+            return
+
         if not self.vc.queue.is_empty:
             self.vc.queue.clear()
 
@@ -119,7 +132,7 @@ class MusicBot(commands.Cog):
         await server.disconnect()
             
     @commands.command(name='play', aliases=['sing','p'], description="Plays a given input if it's valid")
-    async def play(self, ctx, *, user_input : str):
+    async def play(self, ctx, *, user_input = None):
         try:
             if not self._is_connected(ctx):
                 if await ctx.invoke(self.bot.get_command('join')) == False:
@@ -190,6 +203,7 @@ class MusicBot(commands.Cog):
                             embed = discord.Embed(title="", description=f"Queued [{self.current_track.title}]({self.current_track.info['uri']}) [{ctx.author.mention}]", color=discord.Color.green())
                             await ctx.send(embed=embed)
                         self.vc.queue.put(self.current_track)
+
             else: # TODO: See if it's possible to display actual title instead of "Unknown title"
                 self.current_track = await self.vc.node.get_tracks(query=ctx.message.attachments[0].url, cls=wavelink.LocalTrack)
                 if self.vc.is_playing() or not self.vc.queue.is_empty:
@@ -213,16 +227,9 @@ class MusicBot(commands.Cog):
     async def queue(self, ctx):
         await ctx.typing()
 
-        voice = ctx.message.author.voice
-        if not voice:
-            embed = discord.Embed(title="", description="You're not connected to a voice channel", color=discord.Color.red())
-            return await ctx.send(embed=embed)
-        if not self.vc or not self.vc.is_connected():
-            embed = discord.Embed(title="", description="I'm not connected to a voice channel", color=discord.Color.red())
-            return await ctx.send(embed=embed)
-        if ctx.guild.voice_client.channel != ctx.message.author.voice.channel:
-            embed = discord.Embed(title="", description="You're not connected to the same voice channel as me", color=discord.Color.red())
-            return await ctx.send(embed=embed)
+        if not await self.validate_command(ctx):
+            return
+        
         if self.vc.queue.is_empty:
             embed = discord.Embed(title="", description="The queue is empty", color=discord.Color.blue())
             return await ctx.send(embed=embed)
@@ -230,6 +237,7 @@ class MusicBot(commands.Cog):
         pages = list()
         song_lst = list()
         song_count = 0
+        
         queue_cnt = self.vc.queue.count
         temp_queue = self.vc.queue.copy()
         num_pages = int((queue_cnt // 10) + 1)
@@ -305,16 +313,8 @@ class MusicBot(commands.Cog):
     async def now_playing(self, ctx):
         await ctx.typing()
 
-        voice = ctx.message.author.voice
-        if not voice:
-            embed = discord.Embed(title="", description="You're not connected to a voice channel", color=discord.Color.red())
-            return await ctx.send(embed=embed)
-        if not self.vc or not self.vc.is_connected():
-            embed = discord.Embed(title="", description="I'm not connected to a voice channel", color=discord.Color.red())
-            return await ctx.send(embed=embed)
-        if not self.vc.is_playing():
-            embed = discord.Embed(title="", description="I'm not playing anything", color=discord.Color.red())
-            return await ctx.send(embed=embed)
+        if not await self.validate_command(ctx):
+            return
 
         seconds = int(self.vc.track.length) % (24 * 3600) 
         hour = seconds // 3600
@@ -332,16 +332,9 @@ class MusicBot(commands.Cog):
 
     @commands.command(name="shuffle", aliases=["shuf"], description="Shuffles the queue")
     async def shuffle(self, ctx):
-        voice = ctx.message.author.voice
-        if not voice:
-            embed = discord.Embed(title="", description="You're not connected to a voice channel", color=discord.Color.red())
-            return await ctx.send(embed=embed)
-        if not self.vc or not self.vc.is_connected():
-            embed = discord.Embed(title="", description="I'm not connected to a voice channel", color=discord.Color.red())
-            return await ctx.send(embed=embed)
-        if ctx.guild.voice_client.channel != ctx.message.author.voice.channel:
-            embed = discord.Embed(title="", description="You're not connected to the same voice channel as me", color=discord.Color.red())
-            return await ctx.send(embed=embed)
+        if not await self.validate_command(ctx):
+            return
+        
         if self.vc.queue.is_empty:
             embed = discord.Embed(title="", description="The queue is empty", color=discord.Color.red())
             return await ctx.send(embed=embed)
@@ -371,22 +364,12 @@ class MusicBot(commands.Cog):
 
     @commands.command(name='remove', aliases=['rm'], description="Removes a song from the queue")
     async def remove(self, ctx, *user_input : str):
-        voice = ctx.message.author.voice
-        if not voice:
-            embed = discord.Embed(title="", description="You're not connected to a voice channel", color=discord.Color.red())
-            return await ctx.send(embed=embed)
-        if not self.vc or not self.vc.is_connected():
-            embed = discord.Embed(title="", description="I'm not connected to a voice channel", color=discord.Color.red())
-            return await ctx.send(embed=embed)
-        if ctx.guild.voice_client.channel != ctx.message.author.voice.channel:
-            embed = discord.Embed(title="", description="You're not connected to the same voice channel as me", color=discord.Color.red())
-            return await ctx.send(embed=embed)
+        if not await self.validate_command(ctx) or not user_input:
+            return
+        
         if self.vc.queue.is_empty:
             embed = discord.Embed(title="", description="The queue is empty", color=discord.Color.red())
             return await ctx.send(embed=embed)
-        
-        if not user_input:
-            return
 
         user_input = " ".join(user_input)
         rm_track_num = int(user_input)
@@ -400,16 +383,8 @@ class MusicBot(commands.Cog):
 
     @commands.command(name='skip', aliases=['s', 'next'], description="Skips the current song")
     async def skip(self, ctx):
-        voice = ctx.message.author.voice
-        if not voice:
-            embed = discord.Embed(title="", description="You're not connected to a voice channel", color=discord.Color.red())
-            return await ctx.send(embed=embed)
-        if not self.vc or not self.vc.is_connected():
-            embed = discord.Embed(title="", description="I'm not connected to a voice channel", color=discord.Color.red())
-            return await ctx.send(embed=embed)
-        if ctx.guild.voice_client.channel != ctx.message.author.voice.channel:
-            embed = discord.Embed(title="", description="You're not connected to the same voice channel as me", color=discord.Color.red())
-            return await ctx.send(embed=embed)
+        if not await self.validate_command(ctx):
+            return
 
         if self.vc.queue.is_empty:
             # If the queue is empty, we can stop the bot
@@ -421,52 +396,28 @@ class MusicBot(commands.Cog):
         await self.music_channel.send(embed=embed, delete_after=self.current_track.length)
         return await self.vc.play(self.current_track)
 
-    @commands.command(description="Resumes current paused song")
+    @commands.command(description="Resume current paused song")
     async def resume(self, ctx):
-        voice = ctx.message.author.voice
-        if not voice:
-            embed = discord.Embed(title="", description="You're not connected to a voice channel", color=discord.Color.red())
-            return await ctx.send(embed=embed)
-        if not self.vc or not self.vc.is_connected():
-            embed = discord.Embed(title="", description="I'm not connected to a voice channel", color=discord.Color.red())
-            return await ctx.send(embed=embed)
-        if ctx.guild.voice_client.channel != ctx.message.author.voice.channel:
-            embed = discord.Embed(title="", description="You're not connected to the same voice channel as me", color=discord.Color.red())
-            return await ctx.send(embed=embed)
+        if not await self.validate_command(ctx):
+            return
             
         await self.vc.resume()
-        return await ctx.send(f"Resuming current track")
+        return await ctx.send("Resuming current track")
     
     @commands.command(description="Pause playing song")
     async def pause(self, ctx):
-        voice = ctx.message.author.voice
-        if not voice:
-            embed = discord.Embed(title="", description="You're not connected to a voice channel", color=discord.Color.red())
-            return await ctx.send(embed=embed)
-        if not self.vc or not self.vc.is_connected():
-            embed = discord.Embed(title="", description="I'm not connected to a voice channel", color=discord.Color.red())
-            return await ctx.send(embed=embed)
-        if ctx.guild.voice_client.channel != ctx.message.author.voice.channel:
-            embed = discord.Embed(title="", description="You're not connected to the same voice channel as me", color=discord.Color.red())
-            return await ctx.send(embed=embed)
+        if not await self.validate_command(ctx):
+            return
             
         await self.vc.pause()
-        return await ctx.send(f"Paused current track")
+        return await ctx.send("Paused current track")
 
     @commands.command(name='clear', aliases=['clr', 'cl', 'cr'], description="Clears entire queue")
     async def clear(self, ctx):
         await ctx.typing()
 
-        voice = ctx.message.author.voice
-        if not voice:
-            embed = discord.Embed(title="", description="You're not connected to a voice channel", color=discord.Color.red())
-            return await ctx.send(embed=embed)
-        if not self.vc or not self.vc.is_connected():
-            embed = discord.Embed(title="", description="I'm not connected to a voice channel", color=discord.Color.red())
-            return await ctx.send(embed=embed)
-        if ctx.guild.voice_client.channel != ctx.message.author.voice.channel:
-            embed = discord.Embed(title="", description="You're not connected to the same voice channel as me", color=discord.Color.red())
-            return await ctx.send(embed=embed)
+        if not await self.validate_command(ctx):
+            return
 
         self.vc.queue.clear()
         embed = discord.Embed(title="", description="Queue is cleared", color=discord.Color.green())
@@ -474,31 +425,24 @@ class MusicBot(commands.Cog):
         
     @commands.command(description="Stops the bot and resets the queue")
     async def stop(self, ctx):
-        voice = ctx.message.author.voice
-        if not voice:
-            embed = discord.Embed(title="", description="You're not connected to a voice channel", color=discord.Color.red())
-            return await ctx.send(embed=embed)
-        if not self.vc or not self.vc.is_connected():
-            embed = discord.Embed(title="", description="I'm not connected to a voice channel", color=discord.Color.red())
-            return await ctx.send(embed=embed)
-        if ctx.guild.voice_client.channel != ctx.message.author.voice.channel:
-            embed = discord.Embed(title="", description="You're not connected to the same voice channel as me", color=discord.Color.red())
-            return await ctx.send(embed=embed)
+        if not await self.validate_command(ctx):
+            return
+        
         if not self.vc.is_playing():
             embed = discord.Embed(title="", description="I'm not playing anything", color=discord.Color.red())
             return await ctx.send(embed=embed)
 
         if not self.vc.queue.is_empty:
             self.vc.queue.clear()
+
         await self.vc.stop()
         await ctx.message.add_reaction('🛑')
         
     @commands.command(description="Sets the output volume")
     async def volume(self, ctx, new_volume : int = 100):
-        voice = ctx.message.author.voice
-        if not voice:
-            embed = discord.Embed(title="", description="You're not connected to a voice channel", color=discord.Color.red())
-            return await ctx.send(embed=embed)
+        if not await self.validate_command(ctx):
+            return
+        
         await self.vc.set_volume(new_volume)
 
         await ctx.message.add_reaction('👍')

@@ -2,10 +2,6 @@ import discord
 import subprocess
 from discord.ext import commands
 
-async def setup(bot):
-    info = Info(bot)
-    await bot.add_cog(info)
-
 class Info(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -19,3 +15,7 @@ class Info(commands.Cog):
         info_lst = '\n'.join([py_ver, sys_info])  # Joining the list with newline as the delimiter
         embed.add_field(name="System info", value=info_lst)
         return await ctx.send(embed=embed)
+    
+async def setup(bot):
+    info = Info(bot)
+    await bot.add_cog(info)
