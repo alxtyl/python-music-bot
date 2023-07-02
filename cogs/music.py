@@ -77,7 +77,7 @@ class MusicBot(commands.Cog):
         logging.info(f"{node} is ready")
 
     @commands.Cog.listener()
-    async def on_wavelink_track_end(self, player: wavelink.Player):
+    async def on_wavelink_track_end(self, player: wavelink.Player, track: wavelink.Track, reason):
         # On the end of each track, reset the AFK timer
         # If the queue is not empty, play next song
         if self.timer is not None:
