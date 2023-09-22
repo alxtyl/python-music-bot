@@ -103,7 +103,7 @@ class MusicBot(commands.Cog):
             await ctx.send(embed=embed)
             return False
 
-        channel = voice.channel    
+        channel = voice.channel
         voice_channel = ctx.author.voice.channel
         self.music_channel = ctx.message.channel
 
@@ -219,8 +219,7 @@ class MusicBot(commands.Cog):
 
         except Exception as e:
             logging.error(e, exc_info=True)
-            embed = discord.Embed(title=f"Error", description=f"""Something went wrong with the track you sent, please try again.\nStack dump: {e}""", color=discord.Color.red())
-            embed.set_footer(text="If this persists ping Alex")
+            embed = discord.Embed(title=f"Error", description=f"""Something went wrong with the track you sent, please try again.\nStack trace: {e}""", color=discord.Color.red())
             return await ctx.send(embed=embed)
             
     @commands.command(name='queue', aliases=['q', 'playlist', 'que'], description="Shows the queue")
@@ -316,7 +315,7 @@ class MusicBot(commands.Cog):
         if not await self.validate_command(ctx):
             return
 
-        seconds = int(self.vc.track.length) % (24 * 3600) 
+        seconds = int(self.vc.track.length) % (24 * 3600)
         hour = seconds // 3600
         seconds %= 3600
         minutes = seconds // 60
@@ -343,7 +342,7 @@ class MusicBot(commands.Cog):
         num_items = self.vc.queue.count
 
         if num_items <= 1:
-            embed = discord.Embed(title="", description="Not enought tracks to shuffle in the queue", color=discord.Color.blue())
+            embed = discord.Embed(title="", description="Not enough tracks to shuffle in the queue", color=discord.Color.blue())
             return await ctx.send(embed=embed)
 
         # Populate list
