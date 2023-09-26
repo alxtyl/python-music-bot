@@ -90,10 +90,11 @@ class MusicBot(commands.Cog):
             embed = discord.Embed(title="", description=f"Now playing [{self.current_track.title}]({self.current_track.info['uri']})", color=discord.Color.green())
             await self.music_channel.send(embed=embed, delete_after=self.current_track.length)
             await player.play(self.current_track)
+        
+        await update_queue_file(self.vc.queue)
         if player.is_playing() or not player.is_connected():
             return
         self.timer = asyncio.create_task(self.timeout())
-        await update_queue_file(self.vc.queue)
             
     @commands.command(name='join', aliases=['connect', 'j'], description="Joins the bot into the voice channel")
     async def join(self, ctx):
