@@ -9,6 +9,7 @@ from discord.ext import commands
 
 from global_vars.regex import *
 from global_vars.timeout import *
+from .queue_writer import update_queue_file
 
 logging.getLogger().setLevel(logging.INFO)
 
@@ -89,6 +90,8 @@ class MusicBot(commands.Cog):
             embed = discord.Embed(title="", description=f"Now playing [{self.current_track.title}]({self.current_track.info['uri']})", color=discord.Color.green())
             await self.music_channel.send(embed=embed, delete_after=self.current_track.length)
             await player.play(self.current_track)
+        
+        await update_queue_file(self.vc.queue)
         if player.is_playing() or not player.is_connected():
             return
         self.timer = asyncio.create_task(self.timeout())
@@ -126,6 +129,7 @@ class MusicBot(commands.Cog):
 
         if not self.vc.queue.is_empty:
             self.vc.queue.clear()
+            await update_queue_file(self.vc.queue)
 
         await ctx.message.add_reaction('👋')
         server = ctx.message.guild.voice_client
@@ -210,6 +214,8 @@ class MusicBot(commands.Cog):
                     embed = discord.Embed(title="", description=f"Queued [{self.current_track[0].title}]({self.current_track[0].info['uri']}) [{ctx.author.mention}]", color=discord.Color.green())
                     await ctx.send(embed=embed)
                 self.vc.queue.put(self.current_track[0])
+
+            await update_queue_file(self.vc.queue)
 
             if not self.vc.is_playing():
                 self.current_track = self.vc.queue.get()
@@ -358,6 +364,8 @@ class MusicBot(commands.Cog):
         # Put shuffled list back into the queue
         for track in songs:
             self.vc.queue.put(track)
+        
+        await update_queue_file(self.vc.queue)
 
         await ctx.message.add_reaction('👍')
 
@@ -376,6 +384,8 @@ class MusicBot(commands.Cog):
         if not user_input.isdigit() or rm_track_num > self.vc.queue.count or rm_track_num == 0:
             embed = discord.Embed(title="", description="Please send a valid track to remove", color=discord.Color.red())
             return await ctx.send(embed=embed)
+        
+        await update_queue_file(self.vc.queue)
 
         embed = discord.Embed(title="", description="This command is currently under construction *drill noises* 🚧", color=discord.Color.yellow())
         return await ctx.send(embed=embed, delete_after=120)
@@ -393,6 +403,7 @@ class MusicBot(commands.Cog):
         self.current_track = self.vc.queue.get()
         embed = discord.Embed(title="", description=f"Now playing [{self.current_track.title}]({self.current_track.info['uri']})", color=discord.Color.green())
         await self.music_channel.send(embed=embed, delete_after=self.current_track.length)
+        await update_queue_file(self.vc.queue)
         return await self.vc.play(self.current_track)
 
     @commands.command(description="Resume current paused song")
@@ -419,6 +430,7 @@ class MusicBot(commands.Cog):
             return
 
         self.vc.queue.clear()
+        await update_queue_file(self.vc.queue)
         embed = discord.Embed(title="", description="Queue is cleared", color=discord.Color.green())
         return await ctx.send(embed=embed)
         
@@ -433,6 +445,7 @@ class MusicBot(commands.Cog):
 
         if not self.vc.queue.is_empty:
             self.vc.queue.clear()
+            await update_queue_file(self.vc.queue)
 
         await self.vc.stop()
         await ctx.message.add_reaction('🛑')
