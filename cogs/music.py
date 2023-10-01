@@ -403,8 +403,7 @@ class MusicBot(commands.Cog):
             return await self.vc.stop()
 
         self.current_track = self.vc.queue.get()
-        embed = discord.Embed(title="", description=f"Now playing [{self.current_track.title}]({self.current_track.__repr__})", color=discord.Color.green())
-        await self.music_channel.send(embed=embed, delete_after=self.current_track.length)
+        await self.now_playing_msg(ctx)
         await update_queue_file(self.vc.queue)
         return await self.vc.play(self.current_track)
 
