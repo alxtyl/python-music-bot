@@ -394,6 +394,10 @@ class MusicBot(commands.Cog):
     async def skip(self, ctx):
         if not await self.validate_command(ctx):
             return
+        
+        if not self.vc.is_playing():
+            embed = discord.Embed(title="", description="I'm not playing anything", color=discord.Color.red())
+            return await ctx.send(embed=embed)
 
         if self.vc.queue.is_empty:
             # If the queue is empty, we can stop the bot
