@@ -3,7 +3,6 @@ import discord
 import asyncio
 import logging
 import wavelink
-from random import randint
 from wavelink.ext import spotify
 from discord.ext import commands
 
@@ -81,22 +80,22 @@ class MusicBot(commands.Cog):
             embed = discord.Embed(title="", description=f"Queued [{self.current_track.title}]({(self.current_track.uri)}) [{ctx.author.mention}]", color=discord.Color.green())              
             return await ctx.send(embed=embed)
         
-    async def now_playing_msg(self, ctx):
+    async def now_playing_msg(self):
         if (type(self.current_track) == wavelink.ext.spotify.SpotifyTrack) and (track_url := self.current_track.raw['external_urls']['spotify']):
             embed = discord.Embed(title="", description=f"Now playing [{self.current_track.title}]({track_url})", color=discord.Color.green())
-            return await self.music_channel.send(embed=embed, delete_after=self.current_track.length)
+            return await self.music_channel.send(embed=embed, delete_after=(self.current_track.length / 1000))
         else:
             embed = discord.Embed(title="", description=f"Now playing [{self.current_track.title}]({self.current_track.uri})", color=discord.Color.green())
-            return await self.music_channel.send(embed=embed, delete_after=self.current_track.length)
+            return await self.music_channel.send(embed=embed, delete_after=(self.current_track.length / 1000))
         
     async def now_playing_dur_msg(self, ctx, duration):
         if (type(self.current_track) == wavelink.ext.spotify.SpotifyTrack) and (track_url := self.current_track.raw['external_urls']['spotify']):
             embed = discord.Embed(title="Now playing", color=discord.Color.blurple())
             embed.add_field(name="Current track:", value=f"[{str(self.vc.current.title)}]({track_url}) - {duration}")
-            return await ctx.send(embed=embed, delete_after=self.vc.current.length)
+            return await ctx.send(embed=embed, delete_after=(self.current_track.length / 1000))
         else:
             embed = discord.Embed(title="", description=f"Now playing [{self.current_track.title}]({self.current_track.uri})", color=discord.Color.green())
-            return await self.music_channel.send(embed=embed, delete_after=self.current_track.length)
+            return await self.music_channel.send(embed=embed, delete_after=(self.current_track.length / 1000))
     
     @commands.Cog.listener()
     async def on_wavelink_node_ready(self, node: wavelink.Node):
@@ -113,7 +112,7 @@ class MusicBot(commands.Cog):
             logging.info("AFK timer reset")
         if not player.queue.is_empty and not player.is_playing():
             self.current_track = player.queue.get()
-            await self.now_playing_msg(ctx)
+            await self.now_playing_msg()
             await player.play(self.current_track)
         
         await update_queue_file(self.vc.queue)
@@ -238,7 +237,7 @@ class MusicBot(commands.Cog):
 
             if not self.vc.is_playing():
                 self.current_track = self.vc.queue.get()
-                await self.now_playing_msg(ctx)
+                await self.now_playing_msg()
                 await self.vc.play(self.current_track)
 
         except Exception as e:
@@ -403,7 +402,7 @@ class MusicBot(commands.Cog):
             return await self.vc.stop()
 
         self.current_track = self.vc.queue.get()
-        await self.now_playing_msg(ctx)
+        await self.now_playing_msg()
         await update_queue_file(self.vc.queue)
         return await self.vc.play(self.current_track)
 
