@@ -195,8 +195,6 @@ class MusicBot(commands.Cog):
                             self.vc.queue.put(self.current_track)
 
                         elif decoded and (decoded['type'] is spotify.SpotifySearchType.album or decoded['type'] is spotify.SpotifySearchType.playlist):
-                            embed = discord.Embed(title="", description="Searching, this may take a bit", color=discord.Color.blurple())
-                            #await ctx.send(embed=embed, delete_after=60)
                             counter = 0
                             async for track in spotify.SpotifyTrack.iterator(query=user_input):
                                 self.vc.queue.put(track)
