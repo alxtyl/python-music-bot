@@ -3,6 +3,7 @@ import discord
 import asyncio
 import logging
 import wavelink
+import urllib.request
 from wavelink.ext import spotify
 from discord.ext import commands
 
@@ -40,6 +41,10 @@ class MusicBot(commands.Cog):
         await wavelink.NodePool.connect(client=self.bot, nodes=[node], spotify=sc)
 
 
+    def _is_connected(self, ctx):
+        voice_client = discord.utils.get(ctx.bot.voice_clients, guild=ctx.guild)
+        return voice_client and voice_client.is_connected()
+
     async def timeout(self) -> None:
         await asyncio.sleep(AFK_TIMEOUT)
         if self.vc.is_connected() and not self.vc.is_playing():
@@ -47,6 +52,7 @@ class MusicBot(commands.Cog):
             await self.music_channel.send(embed=embed)
             return await self.vc.disconnect()
         
+
     async def validate_command(self, ctx) -> bool:
         """
         Checks to make sure user is performing
@@ -67,10 +73,16 @@ class MusicBot(commands.Cog):
             return False
         
         return True
+    
 
-    def _is_connected(self, ctx):
-        voice_client = discord.utils.get(ctx.bot.voice_clients, guild=ctx.guild)
-        return voice_client and voice_client.is_connected()
+    async def get_spotify_redirect(self, url: str) -> str:
+        """
+        Takes a Spotify url of the form http://spotify.link/0123456
+        follows the redirect, and returns a Spotify url of the form
+        https://open.spotify.com/MEDIA_TYPE/r
+        """
+        return urllib.request.urlopen(url).geturl().split('&')[0]
+        
     
     async def queue_msg(self, ctx):
         if (type(self.current_track) == wavelink.ext.spotify.SpotifyTrack) and (track_url := self.current_track.raw['external_urls']['spotify']):
@@ -80,6 +92,7 @@ class MusicBot(commands.Cog):
             embed = discord.Embed(title="", description=f"Queued [{self.current_track.title}]({(self.current_track.uri)}) [{ctx.author.mention}]", color=discord.Color.green())              
             return await ctx.send(embed=embed)
         
+
     async def now_playing_msg(self):
         if (type(self.current_track) == wavelink.ext.spotify.SpotifyTrack) and (track_url := self.current_track.raw['external_urls']['spotify']):
             embed = discord.Embed(title="", description=f"Now playing [{self.current_track.title}]({track_url})", color=discord.Color.green())
@@ -88,6 +101,7 @@ class MusicBot(commands.Cog):
             embed = discord.Embed(title="", description=f"Now playing [{self.current_track.title}]({self.current_track.uri})", color=discord.Color.green())
             return await self.music_channel.send(embed=embed, delete_after=(self.current_track.length / 1000))
         
+
     async def now_playing_dur_msg(self, ctx, duration):
         if (type(self.current_track) == wavelink.ext.spotify.SpotifyTrack) and (track_url := self.current_track.raw['external_urls']['spotify']):
             embed = discord.Embed(title="Now playing", color=discord.Color.blurple())
@@ -97,9 +111,11 @@ class MusicBot(commands.Cog):
             embed = discord.Embed(title="", description=f"Now playing [{self.current_track.title}]({self.current_track.uri})", color=discord.Color.green())
             return await self.music_channel.send(embed=embed, delete_after=(self.current_track.length / 1000))
     
+    
     @commands.Cog.listener()
     async def on_wavelink_node_ready(self, node: wavelink.Node):
         logging.info(f"{node} is ready")
+
 
     @commands.Cog.listener()
     async def on_wavelink_track_end(self, payload):
@@ -120,6 +136,7 @@ class MusicBot(commands.Cog):
             return
         self.timer = asyncio.create_task(self.timeout())
             
+
     @commands.command(name='join', aliases=['connect', 'j'], description="Joins the bot into the voice channel")
     async def join(self, ctx):
         await ctx.typing()
@@ -147,6 +164,7 @@ class MusicBot(commands.Cog):
         embed = discord.Embed(title="", description=f"Moved to {channel.name}", color=discord.Color.blurple())
         return await ctx.send(embed=embed)
 
+
     @commands.command(name='leave', aliases=["dc", "disconnect", "bye"], description="Leaves the channel")
     async def leave(self, ctx):
         if not await self.validate_command(ctx):
@@ -159,7 +177,8 @@ class MusicBot(commands.Cog):
         await ctx.message.add_reaction('👋')
         server = ctx.message.guild.voice_client
         await server.disconnect()
-            
+
+
     @commands.command(name='play', aliases=['sing','p'], description="Plays a given input if it's valid")
     async def play(self, ctx, *, user_input = None):
         try:
@@ -186,7 +205,11 @@ class MusicBot(commands.Cog):
                         embed = discord.Embed(title="", description=f"Added {len(self.playlist.tracks)} tracks to the queue [{ctx.author.mention}]", color=discord.Color.green())
                         await ctx.send(embed=embed)
 
-                    elif SPOT_REG.match(user_input):
+                    elif SPOT_REG.match(user_input) or (is_v2_url := SPOT_REG_V2.match(user_input)):
+                        # Get actual spotify url from redirect if link is not in standard form
+                        if is_v2_url:
+                            user_input = await self.get_spotify_redirect(user_input)
+
                         decoded = spotify.decode_url(user_input)
                         if decoded and decoded['type'] is spotify.SpotifySearchType.track:
                             self.current_track = (await spotify.SpotifyTrack.search(query=user_input))[0]
@@ -242,7 +265,8 @@ class MusicBot(commands.Cog):
             logging.error(e, exc_info=True)
             embed = discord.Embed(title=f"Error", description=f"""Something went wrong with the track you sent, please try again.\nStack trace: {e}""", color=discord.Color.red())
             return await ctx.send(embed=embed)
-            
+
+
     @commands.command(name='queue', aliases=['q', 'playlist', 'que'], description="Shows the queue")
     async def queue(self, ctx):
         await ctx.typing()
@@ -330,6 +354,7 @@ class MusicBot(commands.Cog):
                 await message.delete()
                 break
 
+
     @commands.command(name="now_playing", aliases=["np"], description="Shows what's currently playing")
     async def now_playing(self, ctx):
         await ctx.typing()
@@ -349,6 +374,7 @@ class MusicBot(commands.Cog):
 
         return await self.now_playing_dur_msg(ctx, duration)
 
+
     @commands.command(name="shuffle", aliases=["shuf"], description="Shuffles the queue")
     async def shuffle(self, ctx):
         if not await self.validate_command(ctx):
@@ -363,6 +389,7 @@ class MusicBot(commands.Cog):
         await update_queue_file(self.vc.queue)
 
         await ctx.message.add_reaction('👍')
+
 
     @commands.command(name='remove', aliases=['rm'], description="Removes a song from the queue")
     async def remove(self, ctx, *user_input : str):
@@ -385,6 +412,7 @@ class MusicBot(commands.Cog):
         
         await update_queue_file(self.vc.queue)
 
+
     @commands.command(name='skip', aliases=['s', 'next'], description="Skips the current song")
     async def skip(self, ctx):
         if not await self.validate_command(ctx):
@@ -394,15 +422,17 @@ class MusicBot(commands.Cog):
             embed = discord.Embed(title="", description="I'm not playing anything", color=discord.Color.red())
             return await ctx.send(embed=embed)
 
+        await ctx.message.add_reaction('👍')
+
         if self.vc.queue.is_empty:
             # If the queue is empty, we can stop the bot
-            await ctx.message.add_reaction('👍')
             return await self.vc.stop()
 
         self.current_track = self.vc.queue.get()
         await self.now_playing_msg()
         await update_queue_file(self.vc.queue)
         return await self.vc.play(self.current_track)
+
 
     @commands.command(description="Resume current paused song")
     async def resume(self, ctx):
@@ -412,6 +442,7 @@ class MusicBot(commands.Cog):
         await self.vc.resume()
         return await ctx.send("Resuming current track")
     
+
     @commands.command(description="Pause playing song")
     async def pause(self, ctx):
         if not await self.validate_command(ctx):
@@ -419,6 +450,7 @@ class MusicBot(commands.Cog):
             
         await self.vc.pause()
         return await ctx.send("Paused current track")
+
 
     @commands.command(name='clear', aliases=['clr', 'cl', 'cr'], description="Clears entire queue")
     async def clear(self, ctx):
@@ -432,6 +464,7 @@ class MusicBot(commands.Cog):
         embed = discord.Embed(title="", description="Queue is cleared", color=discord.Color.green())
         return await ctx.send(embed=embed)
         
+
     @commands.command(description="Stops the bot and resets the queue")
     async def stop(self, ctx):
         if not await self.validate_command(ctx):
@@ -448,6 +481,7 @@ class MusicBot(commands.Cog):
         await self.vc.stop()
         await ctx.message.add_reaction('🛑')
         
+
     @commands.command(description="Sets the output volume")
     async def volume(self, ctx, new_volume : int = 100):
         if not await self.validate_command(ctx):
@@ -456,6 +490,7 @@ class MusicBot(commands.Cog):
         await self.vc.set_volume(new_volume)
 
         await ctx.message.add_reaction('👍')
+
 
 async def setup(bot):
     music_bot = MusicBot(bot)
