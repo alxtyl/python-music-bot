@@ -205,7 +205,7 @@ class MusicBot(commands.Cog):
                         embed = discord.Embed(title="", description=f"Added {len(self.playlist.tracks)} tracks to the queue [{ctx.author.mention}]", color=discord.Color.green())
                         await ctx.send(embed=embed)
 
-                    elif SPOT_REG.match(user_input) or (is_v2_url := SPOT_REG_V2.match(user_input)):
+                    elif (is_v2_url := SPOT_REG_V2.match(user_input)) or SPOT_REG.match(user_input):
                         # Get actual spotify url from redirect if link is not in standard form
                         if is_v2_url:
                             user_input = await self.get_spotify_redirect(user_input)
