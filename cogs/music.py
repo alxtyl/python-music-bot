@@ -241,12 +241,14 @@ class MusicBot(commands.Cog):
                         self.vc.queue.put(self.current_track[0])
 
                 else:
-                    chosen_track = (await wavelink.YouTubeTrack.search(user_input))[0]
-                    if chosen_track:
-                        self.current_track = chosen_track
+                    chosen_track = (await wavelink.YouTubeTrack.search(user_input))
+                    if chosen_track and 0 < len(chosen_track):
+                        self.current_track = chosen_track[0]
                         if self.vc.is_playing() or not self.vc.queue.is_empty:
                             await self.queue_msg(ctx)
                         self.vc.queue.put(self.current_track)
+                    
+                    raise RuntimeError("YouTube search did not return any results")
 
             else:
                 self.current_track = (await self.vc.node.get_tracks(query=ctx.message.attachments[0].url, cls=wavelink.LocalTrack))[0]
