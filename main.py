@@ -17,7 +17,7 @@ def run():
 
     @bot.event
     async def on_ready():
-        await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name='for !'))
+        await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name='for !'), status=discord.Status.idle)
         for cog in cogs:
             await bot.load_extension(cog)
 
