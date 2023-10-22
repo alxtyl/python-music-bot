@@ -13,7 +13,7 @@ logging.basicConfig(level=logging.DEBUG)
 def run():
     cogs = ["cogs.music", "cogs.misc"]
     intents = discord.Intents.all()
-    bot = commands.Bot(command_prefix='!', intents=intents)
+    bot = commands.Bot(commands.when_mentioned_or('!'), intents=intents, case_insensitive=True)
 
     @bot.event
     async def on_ready():
