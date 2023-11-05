@@ -10,6 +10,7 @@ from discord.ext import commands
 from global_vars.regex import *
 from global_vars.timeout import *
 from utils.queue_util import update_queue_file
+from utils.number_util import is_float
 
 logging.getLogger().setLevel(logging.INFO)
 
@@ -24,6 +25,7 @@ class MusicBot(commands.Cog):
     current_track = None
     music_channel = None
     node = None
+    filter_status = True
     vc : wavelink.Player = None
     
     def __init__(self, bot):
@@ -97,6 +99,11 @@ class MusicBot(commands.Cog):
         """
         return urllib.request.urlopen(url).geturl().split('&')[0]
     
+
+    async def filter_not_active_msg(self, ctx):
+        embed = discord.Embed(title="", description="Filter commands are currently not enabled", color=discord.Color.dark_grey())
+        return await ctx.send(embed=embed, delete_after=30)
+
 
     async def queue_msg(self, ctx):
         if (type(self.current_track) == wavelink.ext.spotify.SpotifyTrack) and (track_url := self.current_track.raw['external_urls']['spotify']):
@@ -385,7 +392,7 @@ class MusicBot(commands.Cog):
             except asyncio.TimeoutError:
                 await message.delete()
                 break
-
+    
 
     @commands.command(name="now_playing", aliases=["np"], description="Shows what's currently playing")
     async def now_playing(self, ctx):
@@ -460,7 +467,7 @@ class MusicBot(commands.Cog):
         return await self.vc.play(self.current_track)
 
 
-    @commands.command(description="Resume current paused song")
+    @commands.command(description="Resume current paused song", aliases=['unpause'])
     async def resume(self, ctx):
         if not await self.validate_command(ctx):
             return
@@ -529,26 +536,49 @@ class MusicBot(commands.Cog):
 
         await ctx.message.add_reaction('👍')
 
-"""
-    @commands.command(description="Changes the timescale of the song")
-    async def timescale(self, ctx, user_input):
+
+    @commands.is_owner()
+    @commands.command(description='Enables or disables filters on the bot')
+    async def toggle_filter(self, ctx):
+        if self.filter_status:
+            await self.vc.set_filter(wavelink.Filter(equalizer=wavelink.Equalizer.flat()), seek=True)
+            self.filter_status = False
+        else:
+            self.filter_status = True
+
+        embed = discord.Embed(title="", description="Filter status has been toggled", color=discord.Color.green())              
+        return await ctx.send(embed=embed, delete_after=60)
+
+
+    @commands.command(description="Resets filter on the bot", aliases=['rs_filter', 'rsf'])
+    async def reset_filter(self, ctx):
         if not await self.validate_command(ctx) or not self.vc.is_playing:
             return
         
-        logging.warn(f"User input: {user_input}")
-        user_input = user_input.split(" ")
+        if not self.filter_status:
+            return await self.filter_not_active_msg(ctx)
 
-        if len(user_input) != 3:
+        await self.vc.set_filter(wavelink.Filter(equalizer=wavelink.Equalizer.flat()), seek=True)
+
+        await ctx.message.add_reaction('👍')
+
+
+    @commands.command(description="Changes the timescale of the song")
+    async def timescale(self, ctx, speed, pitch, rate):
+        if not await self.validate_command(ctx) or not self.vc.is_playing:
+            return
+
+        if not self.filter_status:
+            return await self.filter_not_active_msg(ctx)
+        
+        if not is_float(speed) or not is_float(pitch) or not is_float(rate):
             return
         
-        for param in user_input:
-            if self._is_number(param):
-                param = float(param)
-            else:
-                return
+        timescale_filter = wavelink.Filter(timescale=wavelink.Timescale(speed=float(speed), pitch=float(pitch), rate=float(rate)))
             
-        wavelink.Timescale(speed=user_input[0], pitch=user_input[1], rate=user_input[2])
-"""
+        await self.vc.set_filter(timescale_filter, seek=True)
+
+        await ctx.message.add_reaction('👍')
 
 
 async def setup(bot):
