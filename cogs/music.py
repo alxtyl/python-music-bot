@@ -9,7 +9,7 @@ from discord.ext import commands
 
 from global_vars.regex import *
 from global_vars.timeout import *
-from .queue_writer import update_queue_file
+from utils.queue_util import update_queue_file
 
 logging.getLogger().setLevel(logging.INFO)
 
@@ -127,7 +127,7 @@ class MusicBot(commands.Cog):
     async def now_playing_dur_msg(self, ctx, duration):
         if (type(self.current_track) == wavelink.ext.spotify.SpotifyTrack) and (track_url := self.current_track.raw['external_urls']['spotify']):
             embed = discord.Embed(title="Now Playing", color=discord.Color.blurple())
-            embed.add_field(name="Current track", value=f"[{str(self.vc.current.title)}]({track_url}) - {duration}")
+            embed.add_field(name="Current track", value=f"[{str(self.current_track.title)}]({track_url}) - {duration}")
             embed.add_field(name="Time Elapsed", value=f"{self.parse_time(self.vc.position)}", inline=False)
 
             if 0 < len(self.current_track.images):
@@ -136,7 +136,7 @@ class MusicBot(commands.Cog):
             return await ctx.send(embed=embed, delete_after=(self.current_track.length / 1000))
         else:
             embed = discord.Embed(title="Now Playing", color=discord.Color.blurple())
-            embed.add_field(name="Current track", value=f"[{str(self.vc.current.title)}]({self.current_track.uri}) - {duration}")
+            embed.add_field(name="Current track", value=f"[{str(self.current_track.title)}]({self.current_track.uri}) - {duration}")
             embed.add_field(name="Time Elapsed", value=f"{self.parse_time(self.vc.position)}", inline=False)
             
             if type(self.current_track == wavelink.YouTubeTrack) and self.current_track.thumb is not None:
@@ -411,10 +411,10 @@ class MusicBot(commands.Cog):
             return await ctx.send(embed=embed)
 
         self.vc.queue.shuffle()
-        
-        await update_queue_file(self.vc.queue)
 
         await ctx.message.add_reaction('👍')
+
+        await update_queue_file(self.vc.queue)
 
 
     @commands.command(name='remove', aliases=['rm'], description="Removes a song from the queue")
@@ -528,6 +528,27 @@ class MusicBot(commands.Cog):
         await self.vc.set_volume(int(new_volume))
 
         await ctx.message.add_reaction('👍')
+
+"""
+    @commands.command(description="Changes the timescale of the song")
+    async def timescale(self, ctx, user_input):
+        if not await self.validate_command(ctx) or not self.vc.is_playing:
+            return
+        
+        logging.warn(f"User input: {user_input}")
+        user_input = user_input.split(" ")
+
+        if len(user_input) != 3:
+            return
+        
+        for param in user_input:
+            if self._is_number(param):
+                param = float(param)
+            else:
+                return
+            
+        wavelink.Timescale(speed=user_input[0], pitch=user_input[1], rate=user_input[2])
+"""
 
 
 async def setup(bot):

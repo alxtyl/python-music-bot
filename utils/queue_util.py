@@ -11,7 +11,7 @@ async def update_queue_file(queue):
     with open('.queue.txt', 'w') as file:
         for _ in range(temp_queue.count):
             entry = temp_queue.get()
-            file.write(f'{entry.title}\n{int(entry.duration)}\n')
+            file.write(f'{entry.title}\n{int(entry.duration) / 1000}\n')
     
     # Move to primary file after writing to make atomic
     os.replace('.queue.txt', 'queue.txt')
