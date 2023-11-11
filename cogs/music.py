@@ -39,7 +39,7 @@ class MusicBot(commands.Cog):
                                     client_secret=os.environ['SPOTIFY_SECRET'])
                                                     
 
-        node: wavelink.Node = wavelink.Node(uri='http://localhost:2333', password=os.environ['SERVER_PASS'])
+        node: wavelink.Node = wavelink.Node(uri=os.environ['SERVER'], password=os.environ['SERVER_PASS'])
         await wavelink.NodePool.connect(client=self.bot, nodes=[node], spotify=sc)
 
 
@@ -564,7 +564,10 @@ class MusicBot(commands.Cog):
 
 
     @commands.command(description="Changes the timescale of the song")
-    async def timescale(self, ctx, speed, pitch, rate):
+    async def timescale(self, ctx, speed: str = commands.parameter(default='1', description="Multiplier for the track playback speed"), 
+                        pitch: str = commands.parameter(default='1', description="Multiplier for the track pitch"), 
+                        rate: str = commands.parameter(default='1', description="Multiplier for the track rate (pitch + speed)")):
+        
         if not await self.validate_command(ctx) or not self.vc.is_playing:
             return
 
