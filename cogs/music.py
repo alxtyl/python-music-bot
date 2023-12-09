@@ -1,4 +1,5 @@
 import os
+import time
 import discord
 import asyncio
 import logging
@@ -27,6 +28,7 @@ class MusicBot(commands.Cog):
     node = None
     filter_status = True
     vc : wavelink.Player = None
+    now_playing_lst = list()
     
     def __init__(self, bot):
         self.bot = bot
@@ -38,8 +40,7 @@ class MusicBot(commands.Cog):
         sc = spotify.SpotifyClient(client_id=os.environ['SPOTIFY_ID'],
                                     client_secret=os.environ['SPOTIFY_SECRET'])
                                                     
-
-        node: wavelink.Node = wavelink.Node(uri=os.environ['SERVER'], password=os.environ['SERVER_PASS'])
+        node: wavelink.Node = wavelink.Node(uri=os.environ['LAVAINK_SERVER'], password=os.environ['LAVALINK_SERVER_PASSWORD'])
         await wavelink.NodePool.connect(client=self.bot, nodes=[node], spotify=sc)
 
 
@@ -59,6 +60,24 @@ class MusicBot(commands.Cog):
            return "%dh %02dm %02ds" % (hour, minutes, seconds)
         else:
             return "%02dm %02ds" % (minutes, seconds)
+        
+
+    async def clear_messages(self) -> None:
+        """
+        Clears all associated 'now playing' messages associated with a track
+        """
+        last_msg = None
+
+        try:
+            for msg in self.now_playing_lst:
+                if msg == self.now_playing_lst[-1] and self.vc.is_playing():
+                    last_msg = msg
+                    break
+                await msg.delete()
+        except discord.errors.NotFound:
+            pass
+
+        self.now_playing_lst = [last_msg] if last_msg else []
 
 
     async def timeout(self) -> None:
@@ -77,15 +96,15 @@ class MusicBot(commands.Cog):
         voice = ctx.message.author.voice
         if not voice:
             embed = discord.Embed(title="", description="You're not connected to a voice channel", color=discord.Color.red())
-            await ctx.send(embed=embed)
+            await ctx.send(embed=embed, delete_after=60)
             return False
         if not self.vc or not self.vc.is_connected():
             embed = discord.Embed(title="", description="I'm not connected to a voice channel", color=discord.Color.red())
-            await ctx.send(embed=embed)
+            await ctx.send(embed=embed, delete_after=60)
             return False
         if ctx.guild.voice_client.channel != ctx.message.author.voice.channel:
             embed = discord.Embed(title="", description="You're not connected to the same voice channel as me", color=discord.Color.red())
-            await ctx.send(embed=embed)
+            await ctx.send(embed=embed, delete_after=60)
             return False
         
         return True
@@ -108,10 +127,10 @@ class MusicBot(commands.Cog):
     async def queue_msg(self, ctx):
         if (type(self.current_track) == wavelink.ext.spotify.SpotifyTrack) and (track_url := self.current_track.raw['external_urls']['spotify']):
             embed = discord.Embed(title="", description=f"Queued [{self.current_track.title}]({(track_url)}) [{ctx.author.mention}]", color=discord.Color.green())              
-            return await ctx.send(embed=embed, delete_after=300)
+            return await ctx.send(embed=embed, delete_after=120)  # Delete after 2 minutes
         else:
             embed = discord.Embed(title="", description=f"Queued [{self.current_track.title}]({(self.current_track.uri)}) [{ctx.author.mention}]", color=discord.Color.green())              
-            return await ctx.send(embed=embed, delete_after=300)
+            return await ctx.send(embed=embed, delete_after=120)  # Delete after 2 minutes
         
 
     async def now_playing_msg(self):
@@ -121,35 +140,35 @@ class MusicBot(commands.Cog):
             if 0 < len(self.current_track.images):
                 embed.set_thumbnail(url=self.current_track.images[0])
 
-            return await self.music_channel.send(embed=embed, delete_after=(self.current_track.length / 1000))
+            self.now_playing_lst.append(await self.music_channel.send(embed=embed, delete_after=(self.current_track.length / 1000)))
         else:
             embed = discord.Embed(title="Now Playing", description=f"[{self.current_track.title}]({self.current_track.uri}) - {self.parse_time(self.current_track.length)}", color=discord.Color.green())
 
             if type(self.current_track == wavelink.YouTubeTrack) and self.current_track.thumb is not None:
                 embed.set_thumbnail(url=self.current_track.thumb)
 
-            return await self.music_channel.send(embed=embed, delete_after=(self.current_track.length / 1000))
+            self.now_playing_lst.append(await self.music_channel.send(embed=embed, delete_after=(self.current_track.length / 1000)))
         
 
     async def now_playing_dur_msg(self, ctx, duration):
-        if (type(self.current_track) == wavelink.ext.spotify.SpotifyTrack) and (track_url := self.current_track.raw['external_urls']['spotify']):
+        if (type(self.vc.current) == wavelink.ext.spotify.SpotifyTrack) and (track_url := self.vc.current.raw['external_urls']['spotify']):
             embed = discord.Embed(title="Now Playing", color=discord.Color.blurple())
-            embed.add_field(name="Current track", value=f"[{str(self.current_track.title)}]({track_url}) - {duration}")
+            embed.add_field(name="Current track", value=f"[{str(self.vc.current.title)}]({track_url}) - {duration}")
             embed.add_field(name="Time Elapsed", value=f"{self.parse_time(self.vc.position)}", inline=False)
 
-            if 0 < len(self.current_track.images):
-                embed.set_thumbnail(url=self.current_track.images[0])
+            if 0 < len(self.vc.current.images):
+                embed.set_thumbnail(url=self.vc.current.images[0])
 
-            return await ctx.send(embed=embed, delete_after=(self.current_track.length / 1000))
+            self.now_playing_lst.append(await ctx.send(embed=embed, delete_after=(self.vc.current.length / 1000)))
         else:
             embed = discord.Embed(title="Now Playing", color=discord.Color.blurple())
-            embed.add_field(name="Current track", value=f"[{str(self.current_track.title)}]({self.current_track.uri}) - {duration}")
+            embed.add_field(name="Current track", value=f"[{str(self.vc.current.title)}]({self.vc.current.uri}) - {duration}")
             embed.add_field(name="Time Elapsed", value=f"{self.parse_time(self.vc.position)}", inline=False)
             
-            if type(self.current_track == wavelink.YouTubeTrack) and self.current_track.thumb is not None:
-                embed.set_thumbnail(url=self.current_track.thumb)
+            if type(self.vc.current) == wavelink.YouTubeTrack and self.vc.current.thumb is not None:
+                embed.set_thumbnail(url=self.vc.current.thumb)
 
-            return await ctx.send(embed=embed, delete_after=(self.current_track.length / 1000))
+            self.now_playing_lst.append(await ctx.send(embed=embed, delete_after=(self.vc.current.length / 1000)))
     
     
     @commands.Cog.listener()
@@ -162,10 +181,15 @@ class MusicBot(commands.Cog):
         # On the end of each track, reset the AFK timer
         # If the queue is not empty, play next song
         player = payload.player
+
         if self.timer is not None:
             self.timer.cancel()
             self.timer = None
             logging.info("AFK timer reset")
+
+        if self.now_playing_lst is not None and 0 < len(self.now_playing_lst):
+            await self.clear_messages()
+
         if not player.queue.is_empty and not player.is_playing():
             self.current_track = player.queue.get()
             await self.now_playing_msg()
@@ -455,8 +479,6 @@ class MusicBot(commands.Cog):
             embed = discord.Embed(title="", description="I'm not playing anything", color=discord.Color.red())
             return await ctx.send(embed=embed)
 
-        await ctx.message.add_reaction('👍')
-
         if self.vc.queue.is_empty:
             # If the queue is empty, we can stop the bot
             return await self.vc.stop()
@@ -464,7 +486,8 @@ class MusicBot(commands.Cog):
         self.current_track = self.vc.queue.get()
         await self.now_playing_msg()
         await update_queue_file(self.vc.queue)
-        return await self.vc.play(self.current_track)
+        await self.vc.play(self.current_track)
+        return await ctx.message.add_reaction('👍')
 
 
     @commands.command(description="Resume current paused song", aliases=['unpause'])
@@ -518,7 +541,7 @@ class MusicBot(commands.Cog):
         if not self.vc.is_playing():
             embed = discord.Embed(title="", description="I'm not playing anything", color=discord.Color.red())
             return await ctx.send(embed=embed)
-
+        
         if not self.vc.queue.is_empty:
             self.vc.queue.clear()
             await update_queue_file(self.vc.queue)
@@ -526,6 +549,8 @@ class MusicBot(commands.Cog):
         await self.vc.stop()
         await ctx.message.add_reaction('🛑')
         
+        if self.now_playing_lst is not None and 0 < len(self.now_playing_lst):
+            await self.clear_messages()
 
     @commands.command(description="Sets the output volume")
     async def volume(self, ctx, new_volume):
