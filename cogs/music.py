@@ -33,13 +33,6 @@ class MusicBot(commands.Cog):
     
     def __init__(self, bot):
         self.bot = bot
-        
-    async def setup(self):
-        """
-        Sets up a connection to lavalink
-        """     
-        node: wavelink.Node = wavelink.Node(uri=os.environ['LAVAINK_SERVER'], password=os.environ['LAVALINK_SERVER_PASSWORD'])
-        await wavelink.Pool.connect(client=self.bot, nodes=[node], cache_capacity=100)
 
 
     def _is_connected(self, ctx):
@@ -68,6 +61,23 @@ class MusicBot(commands.Cog):
         return [member for member in channel.members if not member.bot]
         
 
+    async def setup(self):
+        """
+        Sets up a connection to lavalink
+        """     
+        node: wavelink.Node = wavelink.Node(uri=os.environ['LAVAINK_SERVER'], password=os.environ['LAVALINK_SERVER_PASSWORD'])
+        await wavelink.Pool.connect(client=self.bot, nodes=[node], cache_capacity=100)
+
+
+    async def get_spotify_redirect(self, url: str) -> str:
+        """
+        Takes a Spotify url of the form http://spotify.link/0123456
+        follows the redirect, and returns a Spotify url of the form
+        https://open.spotify.com/MEDIA_TYPE/r
+        """
+        return urllib.request.urlopen(url).geturl().split('&')[0]
+
+
     async def clear_messages(self) -> None:
         """
         Clears all associated 'now playing' messages associated with a track
@@ -89,6 +99,17 @@ class MusicBot(commands.Cog):
 
         self.now_playing_lst = [last_msg] if last_msg else []
         
+
+    async def shutdown_sequence(self) -> None:
+        """Cleans up messages before leaving the voice channel"""
+        await self.clear_messages()
+
+        try:
+            if self.queue_message_active and self.queue_message:
+                await self.queue_message.delete()
+        except discord.errors.NotFound:
+            pass
+
 
     async def validate_command(self, ctx) -> bool:
         """
@@ -112,31 +133,14 @@ class MusicBot(commands.Cog):
         return True
     
 
-    async def get_spotify_redirect(self, url: str) -> str:
-        """
-        Takes a Spotify url of the form http://spotify.link/0123456
-        follows the redirect, and returns a Spotify url of the form
-        https://open.spotify.com/MEDIA_TYPE/r
-        """
-        return urllib.request.urlopen(url).geturl().split('&')[0]
-    
-
     async def filter_not_active_msg(self, ctx):
         embed = discord.Embed(title="", description="Filter commands are currently not enabled", color=discord.Color.dark_grey())
         return await ctx.send(embed=embed, delete_after=30)
 
 
-    async def queue_msg(self, ctx):
-        if (type(self.current_track) == wavelink.ext.spotify.SpotifyTrack) and (track_url := self.current_track.raw['external_urls']['spotify']):
-            embed = discord.Embed(title="", description=f"Queued [{self.current_track.title}]({(track_url)}) [{ctx.author.mention}]", color=discord.Color.green())              
-            return await ctx.send(embed=embed, delete_after=120)  # Delete after 2 minutes
-        else:
-            embed = discord.Embed(title="", description=f"Queued [{self.current_track.title}]({(self.current_track.uri)}) [{ctx.author.mention}]", color=discord.Color.green())              
-            return await ctx.send(embed=embed, delete_after=120)  # Delete after 2 minute
-        
-    
-    async def on_wavelink_node_ready(self, node: wavelink.Node):
-        logging.info(f"{node} is ready")
+    @commands.Cog.listener()
+    async def on_wavelink_node_ready(self, payload: wavelink.NodeReadyEventPayload) -> None:
+        logging.info(f"Wavelink Node connected: {payload.node!r} | Resumed: {payload.resumed}")
 
     
     # embed.add_field(name="Time Elapsed", value=f"{self.parse_time(self.vc.position)}", inline=False)
@@ -172,6 +176,7 @@ class MusicBot(commands.Cog):
             player: wavelink.Player = before.channel.guild.voice_client
             if player is not None:
                 await player.disconnect()
+                await self.shutdown_sequence()
  
 
     @commands.command(name='join', aliases=['connect', 'j'], description="Joins the bot into the voice channel")
@@ -210,9 +215,11 @@ class MusicBot(commands.Cog):
         if not self.vc.queue:
             self.vc.queue.clear()
 
-        await ctx.message.add_reaction('👋')
         server = ctx.message.guild.voice_client
         await server.disconnect()
+        await ctx.message.add_reaction('👋')
+
+        await self.shutdown_sequence()
 
 
     @commands.command(name='play', aliases=['sing','p'], description="Plays a given input if it's valid")
@@ -353,6 +360,8 @@ class MusicBot(commands.Cog):
                     await message.remove_reaction(reaction, user)
             except asyncio.TimeoutError:
                 await message.delete()
+                self.queue_message_active = False
+                self.queue_message = None
                 break
             except discord.errors.NotFound:
                 pass
