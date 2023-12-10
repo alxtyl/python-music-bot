@@ -5,14 +5,15 @@ import asyncio
 import logging
 import wavelink
 import urllib.request
+from typing import cast
 from discord.ext import commands
 
-from global_vars.regex import *
+from global_vars.regex import SPOT_REG_V2
 from global_vars.timeout import *
 from utils.queue_util import update_queue_file
 from utils.number_util import is_float
 
-#logging.getLogger().setLevel(logging.INFO)
+logging.getLogger().setLevel(logging.INFO)
 
 class VoiceConnectionError(commands.CommandError):
     """Custom Exception class for connection errors."""
@@ -21,11 +22,12 @@ class InvalidVoiceChannel(VoiceConnectionError):
     """Exception for cases of invalid Voice Channels."""
 
 class MusicBot(commands.Cog):
-    timer = None
     current_track = None
     music_channel = None
     node = None
-    filter_status = True
+    filter_status : bool = True
+    queue_message_active : bool = False
+    queue_message = None
     vc : wavelink.Player = None
     now_playing_lst = list()
     
@@ -58,6 +60,14 @@ class MusicBot(commands.Cog):
             return "%02dm %02ds" % (minutes, seconds)
         
 
+    def is_bot_last_vc_member(self, channel: discord.VoiceChannel):
+        return channel and self.bot.user in channel.members and len(self.get_vc_users(channel)) == 0
+
+
+    def get_vc_users(self, channel: discord.VoiceChannel):
+        return [member for member in channel.members if not member.bot]
+        
+
     async def clear_messages(self) -> None:
         """
         Clears all associated 'now playing' messages associated with a track
@@ -65,23 +75,19 @@ class MusicBot(commands.Cog):
         last_msg = None
 
         try:
-            for msg in self.now_playing_lst:
-                if msg == self.now_playing_lst[-1] and self.vc.playing:
-                    last_msg = msg
-                    break
+            if len(self.now_playing_lst) == 1:
+                msg = self.now_playing_lst[0]
                 await msg.delete()
+            else:
+                for msg in self.now_playing_lst:
+                    if msg == self.now_playing_lst[-1] and self.vc.playing:
+                        last_msg = msg
+                        break
+                    await msg.delete()
         except discord.errors.NotFound:
             pass
 
         self.now_playing_lst = [last_msg] if last_msg else []
-
-
-    async def timeout(self) -> None:
-        await asyncio.sleep(AFK_TIMEOUT)
-        if self.vc.connected and not self.vc.is_playing():
-            embed = discord.Embed(title="", description=f"Disconnecting due to inactivity", color=discord.Color.blue())
-            await self.music_channel.send(embed=embed)
-            return await self.vc.disconnect()
         
 
     async def validate_command(self, ctx) -> bool:
@@ -135,6 +141,7 @@ class MusicBot(commands.Cog):
     
     # embed.add_field(name="Time Elapsed", value=f"{self.parse_time(self.vc.position)}", inline=False)
 
+
     @commands.Cog.listener()
     async def on_wavelink_track_start(self, payload: wavelink.TrackStartEventPayload) -> None:
         player = payload.player
@@ -142,8 +149,8 @@ class MusicBot(commands.Cog):
         if not player:
             return
 
-        if self.now_playing_lst is not None and 0 < len(self.now_playing_lst):
-            await self.clear_messages()
+        #if self.now_playing_lst is not None and 0 < len(self.now_playing_lst):
+        #    await self.clear_messages()
         
         original = payload.original
         track = payload.track
@@ -151,13 +158,21 @@ class MusicBot(commands.Cog):
         embed = discord.Embed(title="Now Playing", description=f"[{track.title}]({track.uri}) - {self.parse_time(self.current_track.length)} ", color=discord.Color.green())
 
         if track.artwork:
-            embed.set_image(url=track.artwork)
+            embed.set_thumbnail(url=track.artwork)
 
         if original and original.recommended:
             embed.description += f"\n\n`This track was recommended via {track.source}`"
 
         self.now_playing_lst.append(await self.music_channel.send(embed=embed, delete_after=(self.vc.current.length / 1000)))
-            
+
+
+    @commands.Cog.listener()
+    async def on_voice_state_update(self, member, before: discord.VoiceState, after):
+        if self.is_bot_last_vc_member(before.channel):
+            player: wavelink.Player = before.channel.guild.voice_client
+            if player is not None:
+                await player.disconnect()
+ 
 
     @commands.command(name='join', aliases=['connect', 'j'], description="Joins the bot into the voice channel")
     async def join(self, ctx):
@@ -218,6 +233,8 @@ class MusicBot(commands.Cog):
             if SPOT_REG_V2.match(user_input):
                 user_input = await self.get_spotify_redirect(user_input)
 
+            self.vc.autoplay = wavelink.AutoPlayMode.enabled
+
             tracks : wavelink.Search = await wavelink.Playable.search(user_input)  # tracks: wavelink.Search
         
             if not tracks:
@@ -258,6 +275,7 @@ class MusicBot(commands.Cog):
         pages = list()
         song_lst = list()
         song_count = 0
+        total_time = 0
         
         queue_cnt = len(self.vc.queue)
         temp_queue = copy.deepcopy(self.vc.queue)
@@ -269,6 +287,7 @@ class MusicBot(commands.Cog):
             song_num = i + 1
 
             song = temp_queue.get()
+            total_time += song.length
             duration = self.parse_time(song.length)
 
             song_formated = f"{song_num}. {song.title} - {duration}"
@@ -283,13 +302,23 @@ class MusicBot(commands.Cog):
                 song_lst.clear()
 
         cur_page = 1
+        embed.set_footer(text=f"Total time for queue: {self.parse_time(total_time)}")
+
+        if self.queue_message_active:
+            try:
+                await self.queue_message.delete()
+            except discord.errors.NotFound:
+                pass
+
+        self.queue_message_active = True
 
         if num_pages == 1:
             message = await ctx.send(
             content="",
             embed=pages[cur_page - 1],
-            delete_after=QUEUE_TIMEOUT
-            )
+            delete_after=QUEUE_TIMEOUT)
+
+            self.queue_message = message
             return
 
         # Create the page(s) for user(s) to scroll through
@@ -297,6 +326,8 @@ class MusicBot(commands.Cog):
             content=f"Page {cur_page}/{num_pages}\n",
             embed=pages[cur_page - 1]
         )
+
+        self.queue_message = message
 
         await message.add_reaction("◀️")
         await message.add_reaction("▶️")
@@ -323,6 +354,8 @@ class MusicBot(commands.Cog):
             except asyncio.TimeoutError:
                 await message.delete()
                 break
+            except discord.errors.NotFound:
+                pass
     
 
     @commands.command(name="now_playing", aliases=["np"], description="Shows what's currently playing")
@@ -369,7 +402,7 @@ class MusicBot(commands.Cog):
             embed = discord.Embed(title="", description="Please send a valid track to remove", color=discord.Color.red())
             return await ctx.send(embed=embed)
         
-        del self.vc.queue[rm_track_num]
+        self.vc.queue.delete(rm_track_num)
         return await ctx.message.add_reaction('👍')
 
 
@@ -382,6 +415,9 @@ class MusicBot(commands.Cog):
             embed = discord.Embed(title="", description="I'm not playing anything", color=discord.Color.red())
             return await ctx.send(embed=embed)
 
+        if self.now_playing_lst is not None and 0 < len(self.now_playing_lst):
+            await self.clear_messages()
+
         if not self.vc.queue:
             # If the queue is empty, we can stop the bot
             await self.vc.stop()
@@ -392,30 +428,15 @@ class MusicBot(commands.Cog):
         return await ctx.message.add_reaction('👍')
 
 
-    @commands.command(description="Resume current paused song", aliases=['unpause'])
-    async def resume(self, ctx):
-        if not await self.validate_command(ctx):
+    @commands.command(name="toggle", aliases=["pause", "resume"])
+    async def pause_resume(self, ctx: commands.Context) -> None:
+        """Pause or Resume the Player depending on its current state."""
+        player: wavelink.Player = cast(wavelink.Player, ctx.voice_client)
+        if not player:
             return
 
-        if not self.vc.is_paused():
-            embed = discord.Embed(title="", description="I'm not paused", color=discord.Color.red())
-            return await ctx.send(embed=embed)
-            
-        await self.vc.resume()
-        return await ctx.message.add_reaction('👍')
-    
-    # Todo: Needs to be updated
-    @commands.command(description="Pause playing song")
-    async def pause(self, ctx):
-        if not await self.validate_command(ctx):
-            return
-
-        if not self.vc.is_playing():
-            embed = discord.Embed(title="", description="I'm not playing anything", color=discord.Color.red())
-            return await ctx.send(embed=embed)
-            
-        await self.vc.pause()
-        return await ctx.message.add_reaction('👍')
+        await player.pause(not player.paused)
+        await ctx.message.add_reaction('👍')
 
 
     @commands.command(name='clear', aliases=['clr', 'cl', 'cr'], description="Clears entire queue")
@@ -446,13 +467,15 @@ class MusicBot(commands.Cog):
         if self.vc.queue:
             self.vc.queue.clear()
 
+        self.vc.autoplay = wavelink.AutoPlayMode.disabled
+
         await self.vc.stop()
         await ctx.message.add_reaction('🛑')
-        
+
         if self.now_playing_lst is not None and 0 < len(self.now_playing_lst):
             await self.clear_messages()
 
-
+    # TODO: Needs to be upgraded
     @commands.command(description="Sets the output volume")
     async def volume(self, ctx, new_volume):
         if not await self.validate_command(ctx) or not self.vc.playing or not new_volume.isdigit():
@@ -462,7 +485,7 @@ class MusicBot(commands.Cog):
 
         await ctx.message.add_reaction('👍')
 
-
+    # TODO: Needs to be upgraded and further enhacments
     @commands.is_owner()
     @commands.command(description='Enables or disables filters on the bot')
     async def toggle_filter(self, ctx):
@@ -475,7 +498,7 @@ class MusicBot(commands.Cog):
         embed = discord.Embed(title="", description="Filter status has been toggled", color=discord.Color.green())              
         return await ctx.send(embed=embed, delete_after=60)
 
-
+    # TODO: Needs to be upgraded
     @commands.command(description="Resets filter on the bot", aliases=['rs_filter', 'rsf'])
     async def reset_filter(self, ctx):
         if not await self.validate_command(ctx) or not self.vc.playing:
@@ -488,7 +511,7 @@ class MusicBot(commands.Cog):
 
         await ctx.message.add_reaction('👍')
 
-
+    # TODO: Need to be upgraded
     @commands.command(description="Changes the timescale of the song")
     async def timescale(self, ctx, speed: str = commands.parameter(default='1', description="Multiplier for the track playback speed"), 
                         pitch: str = commands.parameter(default='1', description="Multiplier for the track pitch"), 
