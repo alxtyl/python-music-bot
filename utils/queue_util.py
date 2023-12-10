@@ -1,4 +1,6 @@
 import os
+import copy
+
 
 async def update_queue_file(queue):
     """Atomically update a status file containing the titles
@@ -7,7 +9,7 @@ async def update_queue_file(queue):
     Args:
         queue - The wavelink queue.
     """
-    temp_queue = queue.copy()
+    temp_queue = copy.deepcopy(queue)
     with open('.queue.txt', 'w') as file:
         for _ in range(temp_queue.count):
             entry = temp_queue.get()

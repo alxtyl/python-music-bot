@@ -9,7 +9,7 @@ import discord
 import logging
 from discord.ext import commands
 
-logging.basicConfig(level=logging.DEBUG)
+#logging.basicConfig(level=logging.DEBUG)
 
 def run():
     logging.info("Bot is started, waiting for Lavalink server to start")
