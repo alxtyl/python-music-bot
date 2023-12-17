@@ -80,24 +80,15 @@ class MusicBot(commands.Cog):
 
     async def clear_messages(self) -> None:
         """
-        Clears all associated 'now playing' messages associated with a track
+        Clears all associated 'now playing' messages
         """
-        last_msg = None
-
         try:
-            if len(self.now_playing_lst) == 1:
-                msg = self.now_playing_lst[0]
+            for msg in self.now_playing_lst:
                 await msg.delete()
-            else:
-                for msg in self.now_playing_lst:
-                    if msg == self.now_playing_lst[-1] and self.vc.playing:
-                        last_msg = msg
-                        break
-                    await msg.delete()
         except discord.errors.NotFound:
             pass
 
-        self.now_playing_lst = [last_msg] if last_msg else []
+        self.now_playing_lst = []
         
 
     async def shutdown_sequence(self) -> None:
@@ -152,14 +143,11 @@ class MusicBot(commands.Cog):
 
         if not player:
             return
-
-        #if self.now_playing_lst is not None and 0 < len(self.now_playing_lst):
-        #    await self.clear_messages()
         
         original = payload.original
         track = payload.track
 
-        embed = discord.Embed(title="Now Playing", description=f"[{track.title}]({track.uri}) - {self.parse_time(self.current_track.length)} ", color=discord.Color.green())
+        embed = discord.Embed(title="Now Playing", description=f"[{track.title}]({track.uri}) - {self.parse_time(track.length)} ", color=discord.Color.green())
 
         if track.artwork:
             embed.set_thumbnail(url=track.artwork)
@@ -167,7 +155,7 @@ class MusicBot(commands.Cog):
         if original and original.recommended:
             embed.description += f"\n\n`This track was recommended via {track.source}`"
 
-        self.now_playing_lst.append(await self.music_channel.send(embed=embed, delete_after=(self.vc.current.length / 1000)))
+        self.now_playing_lst.append(await self.music_channel.send(embed=embed, delete_after=(track.length / 1000)))
 
 
     @commands.Cog.listener()
@@ -275,6 +263,12 @@ class MusicBot(commands.Cog):
         if not await self.validate_command(ctx):
             return
         
+        if self.queue_message_active:
+            try:
+                await self.queue_message.delete()
+            except discord.errors.NotFound:
+                pass
+        
         if not self.vc.queue:
             embed = discord.Embed(title="", description="The queue is empty", color=discord.Color.blue())
             return await ctx.send(embed=embed)
@@ -310,12 +304,6 @@ class MusicBot(commands.Cog):
 
         cur_page = 1
         embed.set_footer(text=f"Total time for queue: {self.parse_time(total_time)}")
-
-        if self.queue_message_active:
-            try:
-                await self.queue_message.delete()
-            except discord.errors.NotFound:
-                pass
 
         self.queue_message_active = True
 
@@ -475,6 +463,9 @@ class MusicBot(commands.Cog):
         
         if self.vc.queue:
             self.vc.queue.clear()
+
+        if self.vc.queue.history:
+            self.vc.queue.history.clear()
 
         self.vc.autoplay = wavelink.AutoPlayMode.disabled
 
