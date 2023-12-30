@@ -163,8 +163,8 @@ class MusicBot(commands.Cog):
         if self.is_bot_last_vc_member(before.channel):
             player: wavelink.Player = before.channel.guild.voice_client
             if player is not None:
-                await player.disconnect()
                 await self.shutdown_sequence()
+                await player.disconnect()
  
 
     @commands.command(name='join', aliases=['connect', 'j'], description="Joins the bot into the voice channel")
@@ -303,7 +303,7 @@ class MusicBot(commands.Cog):
                 song_lst.clear()
 
         cur_page = 1
-        embed.set_footer(text=f"Total time for queue: {self.parse_time(total_time)}")
+        embed.description += f"Total time for queue: {self.parse_time(total_time)}"
 
         self.queue_message_active = True
 
