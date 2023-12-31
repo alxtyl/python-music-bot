@@ -302,9 +302,11 @@ class MusicBot(commands.Cog):
                 song_count = 0
                 song_lst.clear()
 
-        cur_page = 1
-        embed.description += f"Total time for queue: {self.parse_time(total_time)}"
+        queue_time = self.parse_time(total_time)
+        for embed in pages:
+            embed.description = f"Total time for queue: {queue_time}"
 
+        cur_page = 1
         self.queue_message_active = True
 
         if num_pages == 1:
@@ -319,7 +321,7 @@ class MusicBot(commands.Cog):
         # Create the page(s) for user(s) to scroll through
         message = await ctx.send(
             content=f"Page {cur_page}/{num_pages}\n",
-            embed=pages[cur_page - 1]
+            embed=pages[cur_page - 1],
         )
 
         self.queue_message = message
@@ -331,21 +333,34 @@ class MusicBot(commands.Cog):
             try:
                 reaction, user = await self.bot.wait_for("reaction_add", timeout=QUEUE_TIMEOUT)
 
-                if str(reaction.emoji) == "▶️" and cur_page != num_pages:
-                    cur_page += 1
-                    await message.edit(
-                        content=f"Page {cur_page}/{num_pages}",
-                        embed=pages[cur_page - 1]
-                    )
-                    await message.remove_reaction(reaction, user)
-                elif str(reaction.emoji) == "◀️" and cur_page > 1:
-                    cur_page -= 1
-                    await message.edit(
-                        content=f"Page {cur_page}/{num_pages}",
-                        embed=pages[cur_page - 1])
-                    await message.remove_reaction(reaction, user)
-                else:
-                    await message.remove_reaction(reaction, user)
+                if str(reaction.emoji) == "▶️":
+                    if cur_page != num_pages:
+                        cur_page += 1
+                        await message.edit(
+                            content=f"Page {cur_page}/{num_pages}",
+                            embed=pages[cur_page - 1]
+                        )
+                        await message.remove_reaction(reaction, user)
+                    else:
+                        cur_page = 1
+                        await message.edit(
+                            content=f"Page {cur_page}/{num_pages}",
+                            embed=pages[cur_page - 1]
+                        )
+                        await message.remove_reaction(reaction, user)
+                elif str(reaction.emoji) == "◀️":
+                    if 1 < cur_page:
+                        cur_page -= 1
+                        await message.edit(
+                            content=f"Page {cur_page}/{num_pages}",
+                            embed=pages[cur_page - 1])
+                        await message.remove_reaction(reaction, user)
+                    else:
+                        cur_page = num_pages
+                        await message.edit(
+                            content=f"Page {cur_page}/{num_pages}",
+                            embed=pages[cur_page - 1])
+                        await message.remove_reaction(reaction, user)
             except asyncio.TimeoutError:
                 await message.delete()
                 self.queue_message_active = False
