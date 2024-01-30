@@ -83,9 +83,13 @@ class MusicBot(commands.Cog):
         Clears all associated 'now playing' messages
         """
         try:
+            logging.info("Attempting to delete message(s)")
+            logging.info(f"Number of messages attempting to delete: {len(self.now_playing_lst)}")
             for msg in self.now_playing_lst:
                 await msg.delete()
+                logging.info("Deleted message")
         except discord.errors.NotFound:
+            logging.warn("Was unable to find message, execeptio recieved")
             pass
 
         self.now_playing_lst = []
@@ -427,7 +431,7 @@ class MusicBot(commands.Cog):
             embed = discord.Embed(title="", description="I'm not playing anything", color=discord.Color.red())
             return await ctx.send(embed=embed)
 
-        if self.now_playing_lst is not None and 0 < len(self.now_playing_lst):
+        if self.now_playing_lst and 0 < len(self.now_playing_lst):
             await self.clear_messages()
 
         if not self.vc.queue:
@@ -479,9 +483,7 @@ class MusicBot(commands.Cog):
         if self.vc.queue:
             self.vc.queue.clear()
 
-        if self.vc.queue.history:
-            self.vc.queue.history.clear()
-
+        self.vc.queue.history.clear()
         self.vc.autoplay = wavelink.AutoPlayMode.disabled
 
         await self.vc.stop()
