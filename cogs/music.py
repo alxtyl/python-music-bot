@@ -47,7 +47,7 @@ class MusicBot(commands.Cog):
         minutes = seconds // 60
         seconds %= 60
 
-        if hour > 0:
+        if 0 < hour:
            return "%dh %02dm %02ds" % (hour, minutes, seconds)
         else:
             return "%02dm %02ds" % (minutes, seconds)
@@ -82,15 +82,11 @@ class MusicBot(commands.Cog):
         """
         Clears all associated 'now playing' messages
         """
-        try:
-            logging.info("Attempting to delete message(s)")
-            logging.info(f"Number of messages attempting to delete: {len(self.now_playing_lst)}")
-            for msg in self.now_playing_lst:
+        for msg in self.now_playing_lst:
+            try:
                 await msg.delete()
-                logging.info("Deleted message")
-        except discord.errors.NotFound:
-            logging.warn("Was unable to find message, execeptio recieved")
-            pass
+            except discord.errors.NotFound:
+                pass
 
         self.now_playing_lst = []
         
@@ -99,11 +95,11 @@ class MusicBot(commands.Cog):
         """Cleans up messages before leaving the voice channel"""
         await self.clear_messages()
 
-        try:
-            if self.queue_message_active and self.queue_message:
+        if self.queue_message_active and self.queue_message:
+            try:
                 await self.queue_message.delete()
-        except discord.errors.NotFound:
-            pass
+            except discord.errors.NotFound:
+                pass
 
 
     async def validate_command(self, ctx) -> bool:
@@ -136,9 +132,6 @@ class MusicBot(commands.Cog):
     @commands.Cog.listener()
     async def on_wavelink_node_ready(self, payload: wavelink.NodeReadyEventPayload) -> None:
         logging.info(f"Wavelink Node connected: {payload.node!r} | Resumed: {payload.resumed}")
-
-    
-    # embed.add_field(name="Time Elapsed", value=f"{self.parse_time(self.vc.position)}", inline=False)
 
 
     @commands.Cog.listener()
@@ -372,20 +365,6 @@ class MusicBot(commands.Cog):
                 break
             except discord.errors.NotFound:
                 pass
-    
-
-    @commands.command(name="now_playing", aliases=["np"], description="Shows what's currently playing")
-    async def now_playing(self, ctx):
-        await ctx.typing()
-
-        if not await self.validate_command(ctx):
-            return
-        
-        if not self.vc.playing:
-            embed = discord.Embed(title="", description="I'm not playing anything", color=discord.Color.red())
-            return await ctx.send(embed=embed)
-
-        return await self.now_playing_dur_msg(ctx, self.parse_time(self.current_track.length))
 
 
     @commands.command(name="shuffle", aliases=["shuf"], description="Shuffles the queue")
@@ -444,6 +423,31 @@ class MusicBot(commands.Cog):
         return await ctx.message.add_reaction('👍')
 
 
+    @commands.command(name="now_playing", aliases=["np"], description="Shows what's currently playing")
+    async def now_playing(self, ctx):
+        await ctx.typing()
+
+        if not await self.validate_command(ctx):
+            return
+        
+        if not self.vc.playing:
+            embed = discord.Embed(title="", description="I'm not playing anything", color=discord.Color.red())
+            return await ctx.send(embed=embed)
+        
+        track = self.vc.current
+
+        embed = discord.Embed(title="Now Playing", description=f"[{track.title}]({track.uri}) - {self.parse_time(track.length)} ", color=discord.Color.green())
+        embed.add_field(name="Time Elapsed", value=f"{self.parse_time(self.vc.position)}", inline=False)
+
+        if track.artwork:
+            embed.set_thumbnail(url=track.artwork)
+
+        if track.recommended:
+            embed.description += f"\n\n`This track was recommended via {track.source}`"
+
+        self.now_playing_lst.append(await self.music_channel.send(embed=embed, delete_after=(((track.length) - (self.vc.position)) / 1000)))
+
+
     @commands.command(name="toggle", aliases=["pause", "resume"])
     async def pause_resume(self, ctx: commands.Context) -> None:
         """Pause or Resume the Player depending on its current state."""
@@ -492,7 +496,7 @@ class MusicBot(commands.Cog):
         if self.now_playing_lst is not None and 0 < len(self.now_playing_lst):
             await self.clear_messages()
 
-    # TODO: Needs to be upgraded
+
     @commands.command(description="Sets the output volume")
     async def volume(self, ctx, new_volume):
         if not await self.validate_command(ctx) or not self.vc.playing or not new_volume.isdigit():
