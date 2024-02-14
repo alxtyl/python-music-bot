@@ -66,7 +66,7 @@ class MusicBot(commands.Cog):
         Sets up a connection to lavalink
         """     
         node: wavelink.Node = wavelink.Node(uri=os.environ['LAVAINK_SERVER'], password=os.environ['LAVALINK_SERVER_PASSWORD'])
-        await wavelink.Pool.connect(client=self.bot, nodes=[node], cache_capacity=100)
+        await wavelink.Pool.connect(client=self.bot, nodes=[node], cache_capacity=250)
 
 
     async def get_spotify_redirect(self, url: str) -> str:
@@ -208,7 +208,7 @@ class MusicBot(commands.Cog):
 
 
     @commands.command(name='play', aliases=['sing','p'], description="Plays a given input if it's valid")
-    async def play(self, ctx, *, user_input = None):
+    async def play(self, ctx, *, user_input=None, play_now=False):
         try:
             if not user_input:
                 embed = discord.Embed(title="", description="Please enter something to play", color=discord.Color.red())
@@ -241,7 +241,8 @@ class MusicBot(commands.Cog):
                 if self.vc.playing:
                     embed = discord.Embed(title="", description=f"Queued [{track.title}]({(track.uri)}) [{ctx.author.mention}]", color=discord.Color.green())              
                     await ctx.send(embed=embed, delete_after=120)  # Delete after 2 minutes
-                await self.vc.queue.put_wait(track)
+
+                await self.vc.queue.put_wait(track) if not play_now else self.vc.queue.put_at(0, track)
 
             if not self.vc.playing:
                 self.current_track = self.vc.queue.get()
@@ -251,6 +252,14 @@ class MusicBot(commands.Cog):
             logging.error(e, exc_info=True)
             embed = discord.Embed(title=f"Error", description=f"""Something went wrong with the track you sent, please try again.\nStack trace: {e}""", color=discord.Color.red())
             return await ctx.send(embed=embed)
+        
+
+    @commands.command(name='play_now', aliases=['pn'], description="Inserts a track at the front of the queue")
+    async def play_now(self, ctx, *, user_input = None):
+        if not self.vc or not self.vc.queue or self.vc.queue.count < 2:
+            return await ctx.invoke(self.bot.get_command('play'), user_input=user_input)
+        else:
+            return await ctx.invoke(self.bot.get_command('play'), user_input=user_input, play_now=True)
 
 
     @commands.command(name='queue', aliases=['q', 'playlist', 'que'], description="Shows the queue")
@@ -397,7 +406,10 @@ class MusicBot(commands.Cog):
             embed = discord.Embed(title="", description="Please send a valid track to remove", color=discord.Color.red())
             return await ctx.send(embed=embed)
         
-        self.vc.queue.delete(rm_track_num)
+        #self.vc.queue.delete(rm_track_num)
+
+        del self.vc.queue[rm_track_num]
+
         return await ctx.message.add_reaction('👍')
 
 
