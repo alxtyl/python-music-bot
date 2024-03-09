@@ -162,6 +162,13 @@ class MusicBot(commands.Cog):
             if player is not None:
                 await self.shutdown_sequence()
                 await player.disconnect()
+
+    
+    @commands.Cog.listener()
+    async def on_wavelink_inactive_player(self, player: wavelink.Player):
+        if player is not None:
+            await self.shutdown_sequence()
+            await player.disconnect()
  
 
     @commands.command(name='join', aliases=['connect', 'j'], description="Joins the bot into the voice channel")
@@ -181,6 +188,7 @@ class MusicBot(commands.Cog):
         if ctx.voice_client is None:
             self.vc = await channel.connect(cls=wavelink.Player, self_deaf=True)
             await self.vc.set_volume(100)  # Set volume to 100%
+            self.vc.inactive_timeout = AFK_TIMEOUT
             embed = discord.Embed(title="", description=f"Joined {channel.name}", color=discord.Color.blurple())
             return await ctx.send(embed=embed)
         elif ctx.guild.voice_client.channel == voice_channel:
