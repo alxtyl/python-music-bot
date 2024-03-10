@@ -174,16 +174,16 @@ class MusicBot(commands.Cog):
         if ctx.voice_client is None:
             self.vc = await channel.connect(cls=wavelink.Player, self_deaf=True)
             await self.vc.set_volume(100)  # Set volume to 100%
-            self.vc.inactive_timeout = 15
+            self.vc.inactive_timeout = AFK_TIMEOUT
             embed = discord.Embed(title="", description=f"Joined {channel.name}", color=discord.Color.blurple())
-            return await ctx.send(embed=embed)
+            return await ctx.send(embed=embed, delete_after=120)
         elif ctx.guild.voice_client.channel == voice_channel:
             embed = discord.Embed(title="", description=f"I am already in {channel.name}", color=discord.Color.blurple())
-            return await ctx.send(embed=embed)
+            return await ctx.send(embed=embed, delete_after=120)
             
         await ctx.voice_client.move_to(voice_channel)
         embed = discord.Embed(title="", description=f"Moved to {channel.name}", color=discord.Color.blurple())
-        return await ctx.send(embed=embed)
+        return await ctx.send(embed=embed, delete_after=120)
 
 
     @commands.command(name='leave', aliases=["dc", "disconnect", "bye"], description="Leaves the channel")
@@ -192,13 +192,21 @@ class MusicBot(commands.Cog):
             return
 
         if not self.vc.queue:
-            self.vc.queue.clear()
+            self.vc.queue.reset()
 
         server = ctx.message.guild.voice_client
         await server.disconnect()
         await ctx.message.add_reaction('👋')
 
         await self.shutdown_sequence()
+
+    @commands.command(name='ping')
+    async def ping(self, ctx):
+        if not await self.validate_command(ctx):
+            return
+    
+        embed = discord.Embed(title="", description=f"Pong!  `{self.vc.ping}ms`", color=discord.Color.blurple())
+        return await ctx.send(embed=embed, delete_after=60)
 
 
     @commands.command(name='play', aliases=['sing','p'], description="Plays a given input if it's valid")
@@ -587,10 +595,9 @@ class MusicBot(commands.Cog):
         await ctx.message.add_reaction('👍')
 
 
-    @commands.command(description="Rotates the channels of the audio", aliases=['dist'])
-    async def distortion(self, ctx,
-                         sin_offset: float, sin_scale: float, cos_offset: float, cos_scale: float, tan_offset: float, tan_scale: float, offset: float, scale: float
-    ):
+    @commands.command(description="Distorts the audio", aliases=['dist'])
+    async def distortion(self, ctx, sin_offset: float, sin_scale: float, cos_offset: float, 
+                         cos_scale: float, tan_offset: float, tan_scale: float, offset: float, scale: float):
         if not await self.validate_command(ctx) or not self.vc.playing:
             return
 

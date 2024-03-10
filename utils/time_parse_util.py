@@ -6,6 +6,6 @@ def time_format(time: float) -> str:
     seconds %= 60
 
     if 0 < hour:
-        return f"{hour}h {minutes:02}m {hour:02}s"
+        return f"{hour}h {minutes:02}m {seconds:02}s"
     else:
-        return f"{minutes:02}m {hour:02}s"
+        return f"{minutes:02}m {seconds:02}s"
