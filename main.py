@@ -9,9 +9,9 @@ import discord
 from discord.ext import commands
 
 def run():
-    time.sleep(int(os.environ['WAIT_TIME']))  # Give time for Lavalink server to start up
     cogs = ["cogs.music", "cogs.misc"]
     bot = commands.Bot(commands.when_mentioned_or('!'), intents=discord.Intents.all(), case_insensitive=True)
+    time.sleep(int(os.environ['WAIT_TIME']))  # Allow Lavalink server to start up
 
     @bot.event
     async def on_ready():

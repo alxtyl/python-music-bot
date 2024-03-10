@@ -1,5 +1,6 @@
 import os
 import copy
+import random
 import discord
 import asyncio
 import logging
@@ -8,10 +9,9 @@ import urllib.request
 from typing import cast
 from discord.ext import commands
 
-from global_vars.regex import SPOT_REG_V2
 from global_vars.timeout import *
-from utils.queue_util import update_queue_file
-from utils.number_util import is_float
+from global_vars.regex import SPOT_REG_V2
+from utils.time_parse_util import time_format
 
 logging.getLogger().setLevel(logging.INFO)
 
@@ -38,19 +38,6 @@ class MusicBot(commands.Cog):
     def _is_connected(self, ctx):
         voice_client = discord.utils.get(ctx.bot.voice_clients, guild=ctx.guild)
         return voice_client and voice_client.connected
-
-
-    def parse_time(self, time: float) -> str:
-        seconds = int(time / 1000) % (24 * 3600)  # Convert from milliseconds -> seconds
-        hour = seconds // 3600
-        seconds %= 3600
-        minutes = seconds // 60
-        seconds %= 60
-
-        if 0 < hour:
-           return "%dh %02dm %02ds" % (hour, minutes, seconds)
-        else:
-            return "%02dm %02ds" % (minutes, seconds)
         
 
     def is_bot_last_vc_member(self, channel: discord.VoiceChannel):
@@ -144,7 +131,7 @@ class MusicBot(commands.Cog):
         original = payload.original
         track = payload.track
 
-        embed = discord.Embed(title="Now Playing", description=f"[{track.title}]({track.uri}) - {self.parse_time(track.length)} ", color=discord.Color.green())
+        embed = discord.Embed(title="Now Playing", description=f"[{track.title}]({track.uri}) - {time_format(track.length)} ", color=discord.Color.green())
 
         if track.artwork:
             embed.set_thumbnail(url=track.artwork)
@@ -167,7 +154,6 @@ class MusicBot(commands.Cog):
     @commands.Cog.listener()
     async def on_wavelink_inactive_player(self, player: wavelink.Player):
         if player is not None:
-            await self.shutdown_sequence()
             await player.disconnect()
  
 
@@ -188,7 +174,7 @@ class MusicBot(commands.Cog):
         if ctx.voice_client is None:
             self.vc = await channel.connect(cls=wavelink.Player, self_deaf=True)
             await self.vc.set_volume(100)  # Set volume to 100%
-            self.vc.inactive_timeout = AFK_TIMEOUT
+            self.vc.inactive_timeout = 15
             embed = discord.Embed(title="", description=f"Joined {channel.name}", color=discord.Color.blurple())
             return await ctx.send(embed=embed)
         elif ctx.guild.voice_client.channel == voice_channel:
@@ -303,7 +289,7 @@ class MusicBot(commands.Cog):
 
             song = temp_queue.get()
             total_time += song.length
-            duration = self.parse_time(song.length)
+            duration = time_format(song.length)
 
             song_formated = f"{song_num}. {song.title} - {duration}"
             song_lst.append(song_formated)
@@ -316,7 +302,7 @@ class MusicBot(commands.Cog):
                 song_count = 0
                 song_lst.clear()
 
-        queue_time = self.parse_time(total_time)
+        queue_time = time_format(total_time)
         for embed in pages:
             embed.description = f"Total time for queue: {queue_time}"
 
@@ -434,8 +420,7 @@ class MusicBot(commands.Cog):
             await self.clear_messages()
 
         if not self.vc.queue:
-            # If the queue is empty, we can stop the bot
-            await self.vc.stop()
+            await self.vc.stop()  # If the queue is empty, we can stop the bot
             return await ctx.message.add_reaction('👍')
 
         self.current_track = self.vc.queue.get()
@@ -456,8 +441,8 @@ class MusicBot(commands.Cog):
         
         track = self.vc.current
 
-        embed = discord.Embed(title="Now Playing", description=f"[{track.title}]({track.uri}) - {self.parse_time(track.length)} ", color=discord.Color.green())
-        embed.add_field(name="Time Elapsed", value=f"{self.parse_time(self.vc.position)}", inline=False)
+        embed = discord.Embed(title="Now Playing", description=f"[{track.title}]({track.uri}) - {time_format(track.length)} ", color=discord.Color.green())
+        embed.add_field(name="Time Elapsed", value=f"{time_format(self.vc.position)}", inline=False)
 
         if track.artwork:
             embed.set_thumbnail(url=track.artwork)
@@ -505,9 +490,8 @@ class MusicBot(commands.Cog):
             return await ctx.send(embed=embed)
         
         if self.vc.queue:
-            self.vc.queue.clear()
-
-        self.vc.queue.history.clear()
+            self.vc.queue.reset()
+        
         self.vc.autoplay = wavelink.AutoPlayMode.disabled
 
         await self.vc.stop()
@@ -517,7 +501,7 @@ class MusicBot(commands.Cog):
             await self.clear_messages()
 
 
-    @commands.command(description="Sets the output volume")
+    @commands.command(description="Sets the output volume", aliase=['vol'])
     async def volume(self, ctx, new_volume):
         if not await self.validate_command(ctx) or not self.vc.playing or not new_volume.isdigit():
             return
@@ -538,8 +522,17 @@ class MusicBot(commands.Cog):
 
         embed = discord.Embed(title="", description="Filter status has been toggled", color=discord.Color.green())              
         return await ctx.send(embed=embed, delete_after=60)
+    
 
-    # TODO: Needs to be upgraded
+    @commands.command(description="Shows current filters on bot")
+    async def get_filters(self, ctx):
+        if not await self.validate_command(ctx) or not self.vc.playing:
+            return
+        
+        embed = discord.Embed(title="", description=f"Current filters on the bot: {self.vc.filters!s}", color=discord.Color.green())              
+        return await ctx.send(embed=embed, delete_after=60)
+
+
     @commands.command(description="Resets filter on the bot", aliases=['rs_filter', 'rsf'])
     async def reset_filter(self, ctx):
         if not await self.validate_command(ctx) or not self.vc.playing:
@@ -548,29 +541,75 @@ class MusicBot(commands.Cog):
         if not self.filter_status:
             return await self.filter_not_active_msg(ctx)
 
-        await self.vc.set_filter(wavelink.Filter(equalizer=wavelink.Equalizer.flat()), seek=True)
+        # Reset all filters
+        filters: wavelink.Filters = self.vc.filters
+        filters.reset()
+
+        await self.vc.set_filters(filters, seek=True)
 
         await ctx.message.add_reaction('👍')
 
-    # TODO: Need to be upgraded
-    @commands.command(description="Changes the timescale of the song")
-    async def timescale(self, ctx, speed: str = commands.parameter(default='1', description="Multiplier for the track playback speed"), 
-                        pitch: str = commands.parameter(default='1', description="Multiplier for the track pitch"), 
-                        rate: str = commands.parameter(default='1', description="Multiplier for the track rate (pitch + speed)")):
-        
+
+    @commands.command(description="Changes the timescale of the song", aliases=['ts'])
+    async def timescale(self, ctx, speed: float = commands.parameter(default=None, description="Multiplier for the track playback speed"), 
+                        pitch: float = commands.parameter(default=None, description="Multiplier for the track pitch"), 
+                        rate: float = commands.parameter(default=None, description="Multiplier for the track rate (pitch + speed)")):
         if not await self.validate_command(ctx) or not self.vc.playing:
             return
 
         if not self.filter_status:
             return await self.filter_not_active_msg(ctx)
         
-        if not is_float(speed) or not is_float(pitch) or not is_float(rate):
-            return
-        
-        timescale_filter = wavelink.Filter(timescale=wavelink.Timescale(speed=float(speed), pitch=float(pitch), rate=float(rate)))
+        filters: wavelink.Filters = self.vc.filters
+        filters.timescale.set(pitch=pitch if pitch is not None else round(random.uniform(.01, 2.0), 5), 
+                              speed=speed if speed is not None else round(random.uniform(.01, 2.0), 5), 
+                              rate=rate if rate is not None else round(random.uniform(.01, 2.0), 5))
             
-        await self.vc.set_filter(timescale_filter, seek=True)
+        await self.vc.set_filters(filters, seek=True)
+        await ctx.message.add_reaction('👍')
 
+
+    @commands.command(description="Rotates the channels of the audio", aliases=['rot'])
+    async def rotation(self, ctx, rotation_hz: float = commands.parameter(default=None, description="Multiplier for the track playback speed")):
+        if not await self.validate_command(ctx) or not self.vc.playing:
+            return
+
+        if not self.filter_status:
+            return await self.filter_not_active_msg(ctx)
+        
+        if rotation_hz is not None and 100.0 < rotation_hz:
+            rotation_hz = 100.0
+        
+        filters: wavelink.Filters = self.vc.filters
+        filters.rotation.set(rotation_hz=rotation_hz if rotation_hz is not None else round(random.uniform(0.00001, 5), 5))
+            
+        await self.vc.set_filters(filters, seek=True)
+        await ctx.message.add_reaction('👍')
+
+
+    @commands.command(description="Rotates the channels of the audio", aliases=['dist'])
+    async def distortion(self, ctx,
+                         sin_offset: float, sin_scale: float, cos_offset: float, cos_scale: float, tan_offset: float, tan_scale: float, offset: float, scale: float
+    ):
+        if not await self.validate_command(ctx) or not self.vc.playing:
+            return
+
+        if not self.filter_status:
+            return await self.filter_not_active_msg(ctx)
+        
+        filters: wavelink.Filters = self.vc.filters
+        filters.distortion.set(
+            sin_offset=sin_offset if sin_offset is not None else round(random.uniform(.3, 1), 5),
+            sin_scale=sin_scale if sin_scale is not None else round(random.uniform(.3, 1), 5),
+            cos_offset=cos_offset if cos_offset is not None else round(random.uniform(.3, 1), 5),
+            cos_scale=cos_scale if cos_scale is not None else round(random.uniform(.3, 1), 5),
+            tan_offset=tan_offset if tan_offset is not None else round(random.uniform(.3, 1), 5),
+            tan_scale=tan_scale if tan_scale is not None else round(random.uniform(.3, 1), 5),
+            offset=offset if offset is not None else round(random.uniform(.3, 1), 5),
+            scale=scale
+        )
+
+        await self.vc.set_filters(filters, seek=True)
         await ctx.message.add_reaction('👍')
 
 
