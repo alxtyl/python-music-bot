@@ -23,6 +23,7 @@ class InvalidVoiceChannel(VoiceConnectionError):
     """Exception for cases of invalid Voice Channels."""
 
 class MusicBot(commands.Cog):
+    #group = app_commands.Group(name="music", description="Music commands")
     current_track = None
     music_channel = None
     node = None
@@ -52,7 +53,7 @@ class MusicBot(commands.Cog):
     async def setup(self):
         """
         Sets up a connection to lavalink
-        """     
+        """
         node: wavelink.Node = wavelink.Node(uri=os.environ['LAVAINK_SERVER'], password=os.environ['LAVALINK_SERVER_PASSWORD'])
         await wavelink.Pool.connect(client=self.bot, nodes=[node], cache_capacity=250)
 
@@ -90,26 +91,30 @@ class MusicBot(commands.Cog):
                 pass
 
 
-    async def validate_command(self, ctx) -> bool:
+    def validate_command(interaction: discord.Interaction) -> bool:
         """
         Checks to make sure user is performing
         a valid action before executing command
         """
-        voice = ctx.message.author.voice
-        if not voice:
-            embed = discord.Embed(title="", description="You're not connected to a voice channel", color=discord.Color.red())
-            await ctx.send(embed=embed, delete_after=60)
-            return False
-        if not self.vc or not self.vc.connected:
-            embed = discord.Embed(title="", description="I'm not connected to a voice channel", color=discord.Color.red())
-            await ctx.send(embed=embed, delete_after=60)
-            return False
-        if ctx.guild.voice_client.channel != ctx.message.author.voice.channel:
-            embed = discord.Embed(title="", description="You're not connected to the same voice channel as me", color=discord.Color.red())
-            await ctx.send(embed=embed, delete_after=60)
-            return False
+        logging.info(f"Value of interaction.client.voice_clients.channel: {interaction.client.voice_clients}")
+
+        return (interaction.user.voice is not None or interaction.client.voice_clients is not None)
+
+        # voice = ctx.message.author.voice
+        # if not voice:
+        #     embed = discord.Embed(title="", description="You're not connected to a voice channel", color=discord.Color.red())
+        #     await ctx.send(embed=embed, delete_after=60)
+        #     return False
+        # if not self.vc or not self.vc.connected:
+        #     embed = discord.Embed(title="", description="I'm not connected to a voice channel", color=discord.Color.red())
+        #     await ctx.send(embed=embed, delete_after=60)
+        #     return False
+        # if ctx.guild.voice_client.channel != ctx.message.author.voice.channel:
+        #     embed = discord.Embed(title="", description="You're not connected to the same voice channel as me", color=discord.Color.red())
+        #     await ctx.send(embed=embed, delete_after=60)
+        #     return False
         
-        return True
+        # return True
     
 
     async def filter_not_active_msg(self, ctx):
@@ -158,6 +163,24 @@ class MusicBot(commands.Cog):
             await player.disconnect()
  
 
+    @commands.is_owner()
+    @commands.command(name='sync', description="Syncs commands")
+    async def sync(self, ctx: commands.Context) -> None:
+        """Sync commands"""
+        synced = await ctx.bot.tree.sync()
+        await ctx.send(f"Synced {len(synced)} commands globally")
+
+
+    #@group.command(name="ping", description="Get the bot's latency")
+    @app_commands.command(name="ping", description="Get the bot's latency")   
+    @app_commands.check(validate_command) 
+    async def ping(self, interaction: discord.Interaction):
+        await interaction.response.send_message(f"Pong! {round(self.bot.latency * 1000)}ms")
+
+        #embed = discord.Embed(title="", description=f"Pong!  `{self.vc.ping}ms`", color=discord.Color.blurple())
+        #return await ctx.send(embed=embed, delete_after=60)
+
+
     @commands.command(name='join', aliases=['connect', 'j'], description="Joins the bot into the voice channel")
     async def join(self, ctx):
         await ctx.typing()
@@ -200,14 +223,6 @@ class MusicBot(commands.Cog):
         await ctx.message.add_reaction('👋')
 
         await self.shutdown_sequence()
-
-    @commands.command(name='ping')
-    async def ping(self, ctx):
-        if not await self.validate_command(ctx):
-            return
-    
-        embed = discord.Embed(title="", description=f"Pong!  `{self.vc.ping}ms`", color=discord.Color.blurple())
-        return await ctx.send(embed=embed, delete_after=60)
 
 
     @commands.command(name='play', aliases=['sing','p'], description="Plays a given input if it's valid")
