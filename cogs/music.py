@@ -7,8 +7,9 @@ import logging
 import wavelink
 import urllib.request
 from typing import cast
-from discord.ext import commands
 
+from discord import app_commands
+from discord.ext import commands
 from global_vars.timeout import *
 from global_vars.regex import SPOT_REG_V2
 from utils.time_parse_util import time_format
