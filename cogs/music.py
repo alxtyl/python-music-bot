@@ -8,6 +8,8 @@ import wavelink
 import urllib.request
 from typing import cast
 
+from utils.connect import *
+from utils.validate import *
 from discord import app_commands
 from discord.ext import commands
 from global_vars.timeout import *
@@ -33,22 +35,10 @@ class MusicBot(commands.Cog):
     vc : wavelink.Player = None
     now_playing_lst = list()
     
+
     def __init__(self, bot):
         self.bot = bot
 
-
-    def _is_connected(self, ctx):
-        voice_client = discord.utils.get(ctx.bot.voice_clients, guild=ctx.guild)
-        return voice_client and voice_client.connected
-        
-
-    def is_bot_last_vc_member(self, channel: discord.VoiceChannel):
-        return channel and self.bot.user in channel.members and len(self.get_vc_users(channel)) == 0
-
-
-    def get_vc_users(self, channel: discord.VoiceChannel):
-        return [member for member in channel.members if not member.bot]
-        
 
     async def setup(self):
         """
@@ -71,13 +61,14 @@ class MusicBot(commands.Cog):
         """
         Clears all associated 'now playing' messages
         """
-        for msg in self.now_playing_lst:
-            try:
-                await msg.delete()
-            except discord.errors.NotFound:
-                pass
+        if 0 < len(self.now_playing_lst):
+            for msg in self.now_playing_lst:
+                try:
+                    await msg.delete()
+                except discord.errors.NotFound:
+                    pass
 
-        self.now_playing_lst = []
+            self.now_playing_lst = []
         
 
     async def shutdown_sequence(self) -> None:
@@ -90,32 +81,6 @@ class MusicBot(commands.Cog):
             except discord.errors.NotFound:
                 pass
 
-
-    def validate_command(interaction: discord.Interaction) -> bool:
-        """
-        Checks to make sure user is performing
-        a valid action before executing command
-        """
-        logging.info(f"Value of interaction.client.voice_clients.channel: {interaction.client.voice_clients}")
-
-        return (interaction.user.voice is not None or interaction.client.voice_clients is not None)
-
-        # voice = ctx.message.author.voice
-        # if not voice:
-        #     embed = discord.Embed(title="", description="You're not connected to a voice channel", color=discord.Color.red())
-        #     await ctx.send(embed=embed, delete_after=60)
-        #     return False
-        # if not self.vc or not self.vc.connected:
-        #     embed = discord.Embed(title="", description="I'm not connected to a voice channel", color=discord.Color.red())
-        #     await ctx.send(embed=embed, delete_after=60)
-        #     return False
-        # if ctx.guild.voice_client.channel != ctx.message.author.voice.channel:
-        #     embed = discord.Embed(title="", description="You're not connected to the same voice channel as me", color=discord.Color.red())
-        #     await ctx.send(embed=embed, delete_after=60)
-        #     return False
-        
-        # return True
-    
 
     async def filter_not_active_msg(self, ctx):
         embed = discord.Embed(title="", description="Filter commands are currently not enabled", color=discord.Color.dark_grey())
@@ -149,8 +114,8 @@ class MusicBot(commands.Cog):
 
 
     @commands.Cog.listener()
-    async def on_voice_state_update(self, member, before: discord.VoiceState, after):
-        if self.is_bot_last_vc_member(before.channel):
+    async def on_voice_state_update(self, before: discord.VoiceState):
+        if is_bot_last_vc_member(self.bot, before.channel):
             player: wavelink.Player = before.channel.guild.voice_client
             if player is not None:
                 await self.shutdown_sequence()
@@ -171,58 +136,41 @@ class MusicBot(commands.Cog):
         await ctx.send(f"Synced {len(synced)} commands globally")
 
 
-    #@group.command(name="ping", description="Get the bot's latency")
     @app_commands.command(name="ping", description="Get the bot's latency")   
-    @app_commands.check(validate_command) 
-    async def ping(self, interaction: discord.Interaction):
+    async def ping(self, interaction: discord.Interaction) -> None:
         await interaction.response.send_message(f"Pong! {round(self.bot.latency * 1000)}ms")
 
-        #embed = discord.Embed(title="", description=f"Pong!  `{self.vc.ping}ms`", color=discord.Color.blurple())
-        #return await ctx.send(embed=embed, delete_after=60)
 
+    @app_commands.command(name="join", description="Joins the bot into the voice channel")
+    @app_commands.check(validate_join_command)
+    async def join(self, interaction: discord.Interaction):
+        user_channel = interaction.user.voice.channel
+        bot_channel = get_voice_channel(interaction=interaction)
+        self.music_channel = interaction.channel
 
-    @commands.command(name='join', aliases=['connect', 'j'], description="Joins the bot into the voice channel")
-    async def join(self, ctx):
-        await ctx.typing()
-
-        voice = ctx.message.author.voice
-        if not voice or ctx.author.voice.channel is None or ctx.author.voice is None:
-            embed = discord.Embed(title="", description="You're not connected to a voice channel", color=discord.Color.red())
-            await ctx.send(embed=embed)
-            return False
-
-        channel = voice.channel
-        voice_channel = ctx.author.voice.channel
-        self.music_channel = ctx.message.channel
-
-        if ctx.voice_client is None:
-            self.vc = await channel.connect(cls=wavelink.Player, self_deaf=True)
+        if user_channel is not None and bot_channel is None:
+            self.vc = await user_channel.connect(cls=wavelink.Player, self_deaf=True)
             await self.vc.set_volume(100)  # Set volume to 100%
             self.vc.inactive_timeout = AFK_TIMEOUT
-            embed = discord.Embed(title="", description=f"Joined {channel.name}", color=discord.Color.blurple())
-            return await ctx.send(embed=embed, delete_after=120)
-        elif ctx.guild.voice_client.channel == voice_channel:
-            embed = discord.Embed(title="", description=f"I am already in {channel.name}", color=discord.Color.blurple())
-            return await ctx.send(embed=embed, delete_after=120)
+            embed = discord.Embed(title="", description=f"Joined {user_channel.name}", color=discord.Color.blurple())
+            return await interaction.response.send_message(embed=embed, delete_after=120)
+        elif user_channel == bot_channel:
+            return await interaction.response.send_message(content=f"I am already in {user_channel.name}", ephemeral=True)
             
-        await ctx.voice_client.move_to(voice_channel)
-        embed = discord.Embed(title="", description=f"Moved to {channel.name}", color=discord.Color.blurple())
-        return await ctx.send(embed=embed, delete_after=120)
+        await interaction.guild.voice_client.move_to(user_channel)
+        embed = discord.Embed(title="", description=f"Moved to {user_channel.name}", color=discord.Color.blurple())
+        return await interaction.response.send_message(embed=embed, delete_after=120)
 
 
-    @commands.command(name='leave', aliases=["dc", "disconnect", "bye"], description="Leaves the channel")
-    async def leave(self, ctx):
-        if not await self.validate_command(ctx):
-            return
-
+    @app_commands.command(name='leave', description="Leaves the channel")
+    @app_commands.check(validate_command_voice)
+    async def leave(self, interaction: discord.Interaction):
         if not self.vc.queue:
             self.vc.queue.reset()
 
-        server = ctx.message.guild.voice_client
-        await server.disconnect()
-        await ctx.message.add_reaction('👋')
-
+        await interaction.response.send_message(content="Left the channel", ephemeral=True)
         await self.shutdown_sequence()
+        await self.vc.disconnect()
 
 
     @commands.command(name='play', aliases=['sing','p'], description="Plays a given input if it's valid")
@@ -232,7 +180,7 @@ class MusicBot(commands.Cog):
                 embed = discord.Embed(title="", description="Please enter something to play", color=discord.Color.red())
                 return await ctx.send(embed=embed)
 
-            if not self._is_connected(ctx):
+            if not is_connected(ctx):
                 if await ctx.invoke(self.bot.get_command('join')) == False:
                     return
 
@@ -244,8 +192,7 @@ class MusicBot(commands.Cog):
                 user_input = await self.get_spotify_redirect(user_input)
 
             self.vc.autoplay = wavelink.AutoPlayMode.enabled
-
-            tracks : wavelink.Search = await wavelink.Playable.search(user_input)  # tracks: wavelink.Search
+            tracks: wavelink.Search = await wavelink.Playable.search(user_input)
         
             if not tracks:
                 RuntimeError("Search did not return any results")
