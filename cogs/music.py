@@ -142,7 +142,7 @@ class MusicBot(commands.Cog):
 
 
     @app_commands.command(name="join", description="Joins the bot into the voice channel")
-    @app_commands.check(validate_join_command)
+    @app_commands.check(validate_command_join)
     async def join(self, interaction: discord.Interaction):
         user_channel = interaction.user.voice.channel
         bot_channel = get_voice_channel(interaction=interaction)
@@ -173,39 +173,31 @@ class MusicBot(commands.Cog):
         await self.vc.disconnect()
 
 
-    @commands.command(name='play', aliases=['sing','p'], description="Plays a given input if it's valid")
-    async def play(self, ctx, *, user_input=None, play_now=False):
+    @app_commands.command(name='play', description="Play's a audio from a url or searchs for YT")
+    @app_commands.check(validate_command_play)
+    async def play(self, interaction: discord.Interaction, input: str, play_now: bool=False):
         try:
-            if not user_input:
-                embed = discord.Embed(title="", description="Please enter something to play", color=discord.Color.red())
-                return await ctx.send(embed=embed)
-
-            if not is_connected(ctx):
-                if await ctx.invoke(self.bot.get_command('join')) == False:
-                    return
-
-            if ctx.guild.voice_client.channel != ctx.message.author.voice.channel:
-                embed = discord.Embed(title="", description="You're not connected to the same voice channel as me", color=discord.Color.red())
-                return await ctx.send(embed=embed)
+            if not input:
+                return await interaction.response.send_message(content="Please enter something to play!", ephemeral=True)
             
-            if SPOT_REG_V2.match(user_input):
-                user_input = await self.get_spotify_redirect(user_input)
+            if SPOT_REG_V2.match(input):
+                input = await self.get_spotify_redirect(input)
 
             self.vc.autoplay = wavelink.AutoPlayMode.enabled
-            tracks: wavelink.Search = await wavelink.Playable.search(user_input)
+            tracks: wavelink.Search = await wavelink.Playable.search(input)
         
             if not tracks:
-                RuntimeError("Search did not return any results")
+                return await interaction.response.send_message(content="Search did not return any results!", ephemeral=True)
 
             if isinstance(tracks, wavelink.Playlist):
-                tracks_added : int = await self.vc.queue.put_wait(tracks)
-                embed = discord.Embed(title="", description=f"Added {tracks_added} tracks to the queue [{ctx.author.mention}]", color=discord.Color.green())
-                await ctx.send(embed=embed, delete_after=120)
+                tracks_added: int = await self.vc.queue.put_wait(tracks)
+                embed = discord.Embed(title="", description=f"{interaction.user.avatar} | Added {tracks_added} tracks to the queue ", color=discord.Color.green())
+                await interaction.response.send_message(embed=embed, delete_after=120)
             else:
                 track : wavelink.Playable = tracks[0]
                 if self.vc.playing:
-                    embed = discord.Embed(title="", description=f"Queued [{track.title}]({(track.uri)}) [{ctx.author.mention}]", color=discord.Color.green())              
-                    await ctx.send(embed=embed, delete_after=120)  # Delete after 2 minutes
+                    embed = discord.Embed(title="", description=f"{interaction.user.avatar} | Queued [{track.title}]({(track.uri)})", color=discord.Color.green())              
+                    await interaction.response.send_message(embed=embed, delete_after=120)  # Delete after 2 minutes
 
                 await self.vc.queue.put_wait(track) if not play_now else self.vc.queue.put_at(0, track)
 
@@ -216,7 +208,7 @@ class MusicBot(commands.Cog):
         except Exception as e:
             logging.error(e, exc_info=True)
             embed = discord.Embed(title=f"Error", description=f"""Something went wrong with the track you sent, please try again.\nStack trace: {e}""", color=discord.Color.red())
-            return await ctx.send(embed=embed)
+            return await interaction.response.send_message(embed=embed, ephemeral=True)
         
 
     @commands.command(name='play_now', aliases=['pn'], description="Inserts a track at the front of the queue")
