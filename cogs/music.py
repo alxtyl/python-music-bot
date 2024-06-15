@@ -33,6 +33,7 @@ class MusicBot(commands.Cog):
     queue_message_active : bool = False
     queue_message = None
     vc : wavelink.Player = None
+    current_interaction: discord.Interaction = None
     now_playing_lst = list()
     
 
@@ -44,7 +45,7 @@ class MusicBot(commands.Cog):
         """
         Sets up a connection to lavalink
         """
-        node: wavelink.Node = wavelink.Node(uri=os.environ['LAVAINK_SERVER'], password=os.environ['LAVALINK_SERVER_PASSWORD'])
+        node: wavelink.Node = wavelink.Node(uri=os.environ['LAVALINK_SERVER'], password=os.environ['LAVALINK_SERVER_PASSWORD'])
         await wavelink.Pool.connect(client=self.bot, nodes=[node], cache_capacity=250)
 
 
@@ -64,7 +65,8 @@ class MusicBot(commands.Cog):
         if 0 < len(self.now_playing_lst):
             for msg in self.now_playing_lst:
                 try:
-                    await msg.delete()
+                    if msg is not None:
+                        await msg.delete()
                 except discord.errors.NotFound:
                     pass
 
@@ -75,7 +77,7 @@ class MusicBot(commands.Cog):
         """Cleans up messages before leaving the voice channel"""
         await self.clear_messages()
 
-        if self.queue_message_active and self.queue_message:
+        if self.queue_message_active and self.queue_message is not None:
             try:
                 await self.queue_message.delete()
             except discord.errors.NotFound:
@@ -110,11 +112,14 @@ class MusicBot(commands.Cog):
         if original and original.recommended:
             embed.description += f"\n\n`This track was recommended via {track.source}`"
 
-        self.now_playing_lst.append(await self.music_channel.send(embed=embed, delete_after=(track.length / 1000)))
+        if self.current_interaction is not None or not self.current_interaction.is_expired():
+            self.now_playing_lst.append(await self.current_interaction.response.send_message(embed=embed, delete_after=(track.length / 1000)))
+        else:
+            self.now_playing_lst.append(await self.current_interaction.response.send_message(embed=embed, delete_after=(track.length / 1000)))
 
 
     @commands.Cog.listener()
-    async def on_voice_state_update(self, before: discord.VoiceState):
+    async def on_voice_state_update(self, member, before, after):
         if is_bot_last_vc_member(self.bot, before.channel):
             player: wavelink.Player = before.channel.guild.voice_client
             if player is not None:
@@ -136,7 +141,7 @@ class MusicBot(commands.Cog):
         await ctx.send(f"Synced {len(synced)} commands globally")
 
 
-    @app_commands.command(name="ping", description="Get the bot's latency")   
+    @app_commands.command(name="ping", description="Get the bot's latency")
     async def ping(self, interaction: discord.Interaction) -> None:
         await interaction.response.send_message(f"Pong! {round(self.bot.latency * 1000)}ms")
 
@@ -173,15 +178,21 @@ class MusicBot(commands.Cog):
         await self.vc.disconnect()
 
 
-    @app_commands.command(name='play', description="Play's a audio from a url or searchs for YT")
+    @app_commands.command(name='play', description="Play's audio from a given input")
     @app_commands.check(validate_command_play)
     async def play(self, interaction: discord.Interaction, input: str, play_now: bool=False):
         try:
-            if not input:
-                return await interaction.response.send_message(content="Please enter something to play!", ephemeral=True)
+            if not is_connected(ctx=None, interaction=interaction):
+                if interaction.user.voice.channel is not None and get_voice_channel(interaction=interaction) is None:
+                    self.vc = await interaction.user.voice.channel.connect(cls=wavelink.Player, self_deaf=True)
+                    await self.vc.set_volume(100)  # Set volume to 100%
+                    self.vc.inactive_timeout = AFK_TIMEOUT
+                    self.music_channel = interaction.channel
             
             if SPOT_REG_V2.match(input):
                 input = await self.get_spotify_redirect(input)
+
+            self.current_interaction = interaction
 
             self.vc.autoplay = wavelink.AutoPlayMode.enabled
             tracks: wavelink.Search = await wavelink.Playable.search(input)
@@ -191,12 +202,12 @@ class MusicBot(commands.Cog):
 
             if isinstance(tracks, wavelink.Playlist):
                 tracks_added: int = await self.vc.queue.put_wait(tracks)
-                embed = discord.Embed(title="", description=f"{interaction.user.avatar} | Added {tracks_added} tracks to the queue ", color=discord.Color.green())
+                embed = discord.Embed(title="", description=f"{interaction.user.display_avatar} | Added {tracks_added} tracks to the queue ", color=discord.Color.green())
                 await interaction.response.send_message(embed=embed, delete_after=120)
             else:
                 track : wavelink.Playable = tracks[0]
                 if self.vc.playing:
-                    embed = discord.Embed(title="", description=f"{interaction.user.avatar} | Queued [{track.title}]({(track.uri)})", color=discord.Color.green())              
+                    embed = discord.Embed(title="", description=f"{interaction.user.display_avatar} | Queued [{track.title}]({(track.uri)})", color=discord.Color.green())              
                     await interaction.response.send_message(embed=embed, delete_after=120)  # Delete after 2 minutes
 
                 await self.vc.queue.put_wait(track) if not play_now else self.vc.queue.put_at(0, track)

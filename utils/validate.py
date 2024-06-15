@@ -2,7 +2,9 @@ import discord
 import discord.ext
 import discord.ext.commands
 from utils.connect import is_connected, get_voice_channel
-from cogs.music import MusicBot
+import logging
+
+logging.getLogger().setLevel(logging.INFO)
 
 
 async def validate_command_voice(interaction: discord.Interaction) -> bool:
@@ -27,10 +29,7 @@ async def validate_command_play(interaction: discord.Interaction) -> bool:
     if interaction.user.voice is None:
         await interaction.response.send_message(content="You're not connected to a voice channel", ephemeral=True)
         return False
-    if not is_connected(ctx=None, interaction=interaction):
-        MusicBot.join(interaction.client, interaction)
-        return True
-    elif interaction.user.voice.channel != get_voice_channel(interaction=interaction):
+    elif get_voice_channel(interaction=interaction) != None and interaction.user.voice.channel != get_voice_channel(interaction=interaction):
         await interaction.response.send_message(content="You're not connected to the same voice channel as me", ephemeral=True)
         return False
     
