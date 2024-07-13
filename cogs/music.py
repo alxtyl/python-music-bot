@@ -53,7 +53,7 @@ class MusicBot(commands.Cog):
         Sets up a connection to lavalink
         """     
         node: wavelink.Node = wavelink.Node(uri=os.environ['LAVAINK_SERVER'], password=os.environ['LAVALINK_SERVER_PASSWORD'])
-        await wavelink.Pool.connect(client=self.bot, nodes=[node], cache_capacity=250)
+        await wavelink.Pool.connect(client=self.bot, nodes=[node], cache_capacity=100)
 
 
     async def get_spotify_redirect(self, url: str) -> str:
