@@ -18,11 +18,6 @@ from utils.time_parse_util import time_format
 
 logging.getLogger().setLevel(logging.INFO)
 
-class VoiceConnectionError(commands.CommandError):
-    """Custom Exception class for connection errors."""
-
-class InvalidVoiceChannel(VoiceConnectionError):
-    """Exception for cases of invalid Voice Channels."""
 
 class MusicBot(commands.Cog):
     #group = app_commands.Group(name="music", description="Music commands")
@@ -46,7 +41,7 @@ class MusicBot(commands.Cog):
         Sets up a connection to lavalink
         """
         node: wavelink.Node = wavelink.Node(uri=os.environ['LAVALINK_SERVER'], password=os.environ['LAVALINK_SERVER_PASSWORD'])
-        await wavelink.Pool.connect(client=self.bot, nodes=[node], cache_capacity=250)
+        await wavelink.Pool.connect(client=self.bot, nodes=[node], cache_capacity=100)
 
 
     async def get_spotify_redirect(self, url: str) -> str:
@@ -112,10 +107,10 @@ class MusicBot(commands.Cog):
         if original and original.recommended:
             embed.description += f"\n\n`This track was recommended via {track.source}`"
 
-        if self.current_interaction is not None or not self.current_interaction.is_expired():
-            self.now_playing_lst.append(await self.current_interaction.response.send_message(embed=embed, delete_after=(track.length / 1000)))
+        if not self.current_interaction.is_expired():
+            return self.now_playing_lst.append(await self.current_interaction.response.send_message(embed=embed, delete_after=(track.length / 1000)))
         else:
-            self.now_playing_lst.append(await self.current_interaction.response.send_message(embed=embed, delete_after=(track.length / 1000)))
+            return self.now_playing_lst.append(await self.music_channel.send(embed=embed, delete_after=(track.length / 1000)))
 
 
     @commands.Cog.listener()
@@ -143,7 +138,7 @@ class MusicBot(commands.Cog):
 
     @app_commands.command(name="ping", description="Get the bot's latency")
     async def ping(self, interaction: discord.Interaction) -> None:
-        await interaction.response.send_message(f"Pong! {round(self.bot.latency * 1000)}ms")
+        await interaction.response.send_message(f"Pong! {round(self.bot.latency * 1000)}ms", delete_after=120)
 
 
     @app_commands.command(name="join", description="Joins the bot into the voice channel")
@@ -220,23 +215,11 @@ class MusicBot(commands.Cog):
             logging.error(e, exc_info=True)
             embed = discord.Embed(title=f"Error", description=f"""Something went wrong with the track you sent, please try again.\nStack trace: {e}""", color=discord.Color.red())
             return await interaction.response.send_message(embed=embed, ephemeral=True)
-        
-
-    @commands.command(name='play_now', aliases=['pn'], description="Inserts a track at the front of the queue")
-    async def play_now(self, ctx, *, user_input = None):
-        if not self.vc or not self.vc.queue or self.vc.queue.count < 2:
-            return await ctx.invoke(self.bot.get_command('play'), user_input=user_input)
-        else:
-            return await ctx.invoke(self.bot.get_command('play'), user_input=user_input, play_now=True)
 
 
-    @commands.command(name='queue', aliases=['q', 'playlist', 'que'], description="Shows the queue")
-    async def queue(self, ctx):
-        await ctx.typing()
-
-        if not await self.validate_command(ctx):
-            return
-        
+    @app_commands.command(name='queue', description="Shows the queue")
+    @app_commands.check(validate_command_voice)
+    async def queue(self, interaction: discord.Interaction):
         if self.queue_message_active:
             try:
                 await self.queue_message.delete()
@@ -245,7 +228,7 @@ class MusicBot(commands.Cog):
         
         if not self.vc.queue:
             embed = discord.Embed(title="", description="The queue is empty", color=discord.Color.blue())
-            return await ctx.send(embed=embed)
+            return await interaction.response.send_message(embed=embed, ephemeral=True)
 
         pages = list()
         song_lst = list()
@@ -284,7 +267,7 @@ class MusicBot(commands.Cog):
         self.queue_message_active = True
 
         if num_pages == 1:
-            message = await ctx.send(
+            message = await interaction.response.send_message(
             content="",
             embed=pages[cur_page - 1],
             delete_after=QUEUE_TIMEOUT)
@@ -293,7 +276,7 @@ class MusicBot(commands.Cog):
             return
 
         # Create the page(s) for user(s) to scroll through
-        message = await ctx.send(
+        message = await interaction.response.send_message(
             content=f"Page {cur_page}/{num_pages}\n",
             embed=pages[cur_page - 1],
         )
@@ -345,40 +328,33 @@ class MusicBot(commands.Cog):
 
 
     @commands.command(name="shuffle", aliases=["shuf"], description="Shuffles the queue")
-    async def shuffle(self, ctx):
-        if not await self.validate_command(ctx):
-            return
-        
+    @app_commands.check(validate_command_voice)
+    async def shuffle(self, interaction: discord.Interaction):
         if not self.vc.queue:
             embed = discord.Embed(title="", description="The queue is empty", color=discord.Color.red())
-            return await ctx.send(embed=embed)
+            return await interaction.response.send_message(embed=embed, ephemeral=True)
 
         self.vc.queue.shuffle()
 
-        await ctx.message.add_reaction('👍')
+        await interaction.response.message.add_reaction('👍')
 
 
-    @commands.command(name='remove', aliases=['rm'], description="Removes a song from the queue")
-    async def remove(self, ctx, *user_input : str):
-        if not await self.validate_command(ctx) or not user_input:
-            return
-        
+    @app_commands.command(name='remove', description="Removes a song from the queue")
+    @app_commands.check(validate_command_voice)
+    async def remove(self, interaction: discord.Interaction, track_to_remove : int):
         if not self.vc.queue:
             embed = discord.Embed(title="", description="The queue is empty", color=discord.Color.red())
-            return await ctx.send(embed=embed)
+            return await interaction.response.send_message(embed=embed, ephemeral=True)
 
-        user_input = " ".join(user_input)
-        rm_track_num = int(user_input) - 1  # Change input to align with zero-based index
+        rm_track_num = int(track_to_remove) - 1  # Change input to align with zero-based index
 
-        if not user_input.isdigit() or len(self.vc.queue) < rm_track_num or rm_track_num <= -1:
+        if not track_to_remove.isdigit() or len(self.vc.queue) < rm_track_num or rm_track_num <= -1:
             embed = discord.Embed(title="", description="Please send a valid track to remove", color=discord.Color.red())
-            return await ctx.send(embed=embed)
-        
-        #self.vc.queue.delete(rm_track_num)
+            return await interaction.response.send_message(embed=embed, ephemeral=True)
 
         del self.vc.queue[rm_track_num]
 
-        return await ctx.message.add_reaction('👍')
+        return await interaction.response.message.add_reaction('👍')
 
 
     @commands.command(name='skip', aliases=['s', 'next'], description="Skips the current song")
