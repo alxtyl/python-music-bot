@@ -276,17 +276,17 @@ class MusicBot(commands.Cog):
             return
 
         # Create the page(s) for user(s) to scroll through
-        message = await interaction.response.send_message(
+        iteraction: discord.Interaction = await interaction.response.send_message(
             content=f"Page {cur_page}/{num_pages}\n",
             embed=pages[cur_page - 1],
         )
 
-        self.queue_message = message
+        self.queue_message, message  = await interaction.original_response()
 
         await message.add_reaction("◀️")
         await message.add_reaction("▶️")
 
-        while True:
+        while not iteraction.is_expired():
             try:
                 reaction, user = await self.bot.wait_for("reaction_add", timeout=QUEUE_TIMEOUT)
 
