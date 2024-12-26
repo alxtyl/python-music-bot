@@ -9,7 +9,7 @@ Below are an example of a Dockerfile that will build the bot, and then a compose
 Sample Dockerfile:
 ```Dockerfile
 # Must have 3.10 <= py version
-FROM python:3.12
+FROM python:3.12-alpine
 
 WORKDIR /app
 
@@ -17,7 +17,7 @@ COPY /python-music-bot /app
 
 # Upgrade pip and install latests packages from pypi
 RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir discord.py==2.3.2 wavelink==3.2.0
+    pip install --no-cache-dir discord.py==2.3.2 wavelink==3.4.1
 
 CMD ["python", "main.py"]
 ```
