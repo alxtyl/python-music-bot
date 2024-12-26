@@ -52,7 +52,7 @@ class MusicBot(commands.Cog):
         """
         Sets up a connection to lavalink
         """     
-        node: wavelink.Node = wavelink.Node(uri=os.environ['LAVAINK_SERVER'], password=os.environ['LAVALINK_SERVER_PASSWORD'])
+        node: wavelink.Node = wavelink.Node(uri=os.environ['LAVALINK_SERVER'], password=os.environ['LAVALINK_SERVER_PASSWORD'])
         await wavelink.Pool.connect(client=self.bot, nodes=[node], cache_capacity=100)
 
 
@@ -229,13 +229,13 @@ class MusicBot(commands.Cog):
 
             self.vc.autoplay = wavelink.AutoPlayMode.enabled
 
-            tracks : wavelink.Search = await wavelink.Playable.search(user_input)  # tracks: wavelink.Search
+            tracks: wavelink.Search = await wavelink.Playable.search(user_input)  # tracks: wavelink.Search
         
-            if not tracks:
+            if not tracks or (isinstance(tracks, list) and len(tracks) < 1):
                 RuntimeError("Search did not return any results")
 
-            if isinstance(tracks, wavelink.Playlist):
-                tracks_added : int = await self.vc.queue.put_wait(tracks)
+            if isinstance(tracks, wavelink.Playlist) or isinstance(tracks, list):
+                tracks_added: int = await self.vc.queue.put_wait(tracks)
                 embed = discord.Embed(title="", description=f"Added {tracks_added} tracks to the queue [{ctx.author.mention}]", color=discord.Color.green())
                 await ctx.send(embed=embed, delete_after=120)
             else:
@@ -423,17 +423,15 @@ class MusicBot(commands.Cog):
         if not self.vc.playing:
             embed = discord.Embed(title="", description="I'm not playing anything", color=discord.Color.red())
             return await ctx.send(embed=embed)
+        
+        await ctx.message.add_reaction('👍')
 
         if self.now_playing_lst and 0 < len(self.now_playing_lst):
             await self.clear_messages()
 
-        if not self.vc.queue:
-            await self.vc.stop()  # If the queue is empty, we can stop the bot
-            return await ctx.message.add_reaction('👍')
+        await self.vc.skip()
 
-        self.current_track = self.vc.queue.get()
-        await self.vc.play(self.current_track)
-        return await ctx.message.add_reaction('👍')
+        return
 
 
     @commands.command(name="now_playing", aliases=["np"], description="Shows what's currently playing")
@@ -497,7 +495,7 @@ class MusicBot(commands.Cog):
             embed = discord.Embed(title="", description="I'm not playing anything", color=discord.Color.red())
             return await ctx.send(embed=embed)
         
-        if self.vc.queue:
+        if 0 < len(self.vc.queue.history):
             self.vc.queue.reset()
         
         self.vc.autoplay = wavelink.AutoPlayMode.disabled
